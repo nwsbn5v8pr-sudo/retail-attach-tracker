@@ -391,6 +391,22 @@
     background: rgba(255, 149, 0, 0.1);
   }
 
+  /* Apple Steps of Services Dropdown Style */
+  .step-select {
+    height: 32px;
+    padding: 0 6px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 6px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .step-select:focus {
+    border-color: var(--accent);
+  }
+
   .notes-input {
     width: 100%;
     min-width: 130px;
@@ -489,6 +505,14 @@
         <option value="IN">✅ Checked In Only</option>
         <option value="OUT">◻️ Not Checked In</option>
       </select>
+      <select id="stepFilter" onchange="filterTable()">
+        <option value="ALL">All Steps of Services</option>
+        <option value="Approach">Approach</option>
+        <option value="Probe">Probe</option>
+        <option value="Present">Present</option>
+        <option value="Listen">Listen</option>
+        <option value="Extend">Extend</option>
+      </select>
       <select id="slamFilter" onchange="filterTable()">
         <option value="ALL">All Performers</option>
         <option value="SLAM">🏆 5/5 Grand Slam (Completed)</option>
@@ -524,6 +548,9 @@
             </th>
             <th style="text-align:center;" id="th-acc" onclick="setColumnSort('acc')">
               🎧 Accessories <span class="sort-icon" id="sort-icon-acc">↕️</span>
+            </th>
+            <th style="text-align:center;" id="th-step" onclick="setColumnSort('step')">
+              Apple Steps of Services <span class="sort-icon" id="sort-icon-step">↕️</span>
             </th>
             <th>Notes / Focus</th>
           </tr>
@@ -577,6 +604,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(0, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-0" onclick="event.stopPropagation()" onchange="saveStep(0, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-0" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(0, this.value)">
           </td>
@@ -628,6 +665,16 @@
               <span class="cnt-val" id="val-acc-1">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(1, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-1" onclick="event.stopPropagation()" onchange="saveStep(1, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-1" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(1, this.value)">
@@ -681,6 +728,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(2, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-2" onclick="event.stopPropagation()" onchange="saveStep(2, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-2" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(2, this.value)">
           </td>
@@ -732,6 +789,16 @@
               <span class="cnt-val" id="val-acc-3">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(3, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-3" onclick="event.stopPropagation()" onchange="saveStep(3, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-3" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(3, this.value)">
@@ -785,6 +852,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(4, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-4" onclick="event.stopPropagation()" onchange="saveStep(4, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-4" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(4, this.value)">
           </td>
@@ -836,6 +913,16 @@
               <span class="cnt-val" id="val-acc-5">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(5, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-5" onclick="event.stopPropagation()" onchange="saveStep(5, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-5" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(5, this.value)">
@@ -889,6 +976,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(6, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-6" onclick="event.stopPropagation()" onchange="saveStep(6, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-6" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(6, this.value)">
           </td>
@@ -940,6 +1037,16 @@
               <span class="cnt-val" id="val-acc-7">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(7, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-7" onclick="event.stopPropagation()" onchange="saveStep(7, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-7" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(7, this.value)">
@@ -993,6 +1100,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(8, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-8" onclick="event.stopPropagation()" onchange="saveStep(8, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-8" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(8, this.value)">
           </td>
@@ -1044,6 +1161,16 @@
               <span class="cnt-val" id="val-acc-9">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(9, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-9" onclick="event.stopPropagation()" onchange="saveStep(9, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-9" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(9, this.value)">
@@ -1097,6 +1224,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(10, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-10" onclick="event.stopPropagation()" onchange="saveStep(10, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-10" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(10, this.value)">
           </td>
@@ -1148,6 +1285,16 @@
               <span class="cnt-val" id="val-acc-11">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(11, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-11" onclick="event.stopPropagation()" onchange="saveStep(11, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-11" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(11, this.value)">
@@ -1201,6 +1348,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(12, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-12" onclick="event.stopPropagation()" onchange="saveStep(12, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-12" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(12, this.value)">
           </td>
@@ -1252,6 +1409,16 @@
               <span class="cnt-val" id="val-acc-13">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(13, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-13" onclick="event.stopPropagation()" onchange="saveStep(13, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-13" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(13, this.value)">
@@ -1305,6 +1472,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(14, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-14" onclick="event.stopPropagation()" onchange="saveStep(14, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-14" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(14, this.value)">
           </td>
@@ -1356,6 +1533,16 @@
               <span class="cnt-val" id="val-acc-15">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(15, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-15" onclick="event.stopPropagation()" onchange="saveStep(15, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-15" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(15, this.value)">
@@ -1409,6 +1596,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(16, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-16" onclick="event.stopPropagation()" onchange="saveStep(16, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-16" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(16, this.value)">
           </td>
@@ -1460,6 +1657,16 @@
               <span class="cnt-val" id="val-acc-17">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(17, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-17" onclick="event.stopPropagation()" onchange="saveStep(17, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-17" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(17, this.value)">
@@ -1513,6 +1720,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(18, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-18" onclick="event.stopPropagation()" onchange="saveStep(18, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-18" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(18, this.value)">
           </td>
@@ -1564,6 +1781,16 @@
               <span class="cnt-val" id="val-acc-19">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(19, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-19" onclick="event.stopPropagation()" onchange="saveStep(19, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-19" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(19, this.value)">
@@ -1617,6 +1844,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(20, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-20" onclick="event.stopPropagation()" onchange="saveStep(20, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-20" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(20, this.value)">
           </td>
@@ -1668,6 +1905,16 @@
               <span class="cnt-val" id="val-acc-21">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(21, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-21" onclick="event.stopPropagation()" onchange="saveStep(21, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-21" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(21, this.value)">
@@ -1721,6 +1968,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(22, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-22" onclick="event.stopPropagation()" onchange="saveStep(22, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-22" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(22, this.value)">
           </td>
@@ -1772,6 +2029,16 @@
               <span class="cnt-val" id="val-acc-23">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(23, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-23" onclick="event.stopPropagation()" onchange="saveStep(23, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-23" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(23, this.value)">
@@ -1825,6 +2092,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(24, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-24" onclick="event.stopPropagation()" onchange="saveStep(24, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-24" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(24, this.value)">
           </td>
@@ -1876,6 +2153,16 @@
               <span class="cnt-val" id="val-acc-25">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(25, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-25" onclick="event.stopPropagation()" onchange="saveStep(25, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-25" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(25, this.value)">
@@ -1929,6 +2216,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(26, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-26" onclick="event.stopPropagation()" onchange="saveStep(26, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-26" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(26, this.value)">
           </td>
@@ -1980,6 +2277,16 @@
               <span class="cnt-val" id="val-acc-27">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(27, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-27" onclick="event.stopPropagation()" onchange="saveStep(27, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-27" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(27, this.value)">
@@ -2033,6 +2340,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(28, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-28" onclick="event.stopPropagation()" onchange="saveStep(28, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-28" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(28, this.value)">
           </td>
@@ -2084,6 +2401,16 @@
               <span class="cnt-val" id="val-acc-29">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(29, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-29" onclick="event.stopPropagation()" onchange="saveStep(29, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-29" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(29, this.value)">
@@ -2137,6 +2464,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(30, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-30" onclick="event.stopPropagation()" onchange="saveStep(30, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-30" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(30, this.value)">
           </td>
@@ -2188,6 +2525,16 @@
               <span class="cnt-val" id="val-acc-31">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(31, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-31" onclick="event.stopPropagation()" onchange="saveStep(31, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-31" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(31, this.value)">
@@ -2241,6 +2588,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(32, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-32" onclick="event.stopPropagation()" onchange="saveStep(32, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-32" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(32, this.value)">
           </td>
@@ -2292,6 +2649,16 @@
               <span class="cnt-val" id="val-acc-33">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(33, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-33" onclick="event.stopPropagation()" onchange="saveStep(33, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-33" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(33, this.value)">
@@ -2345,6 +2712,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(34, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-34" onclick="event.stopPropagation()" onchange="saveStep(34, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-34" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(34, this.value)">
           </td>
@@ -2396,6 +2773,16 @@
               <span class="cnt-val" id="val-acc-35">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(35, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-35" onclick="event.stopPropagation()" onchange="saveStep(35, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-35" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(35, this.value)">
@@ -2449,6 +2836,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(36, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-36" onclick="event.stopPropagation()" onchange="saveStep(36, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-36" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(36, this.value)">
           </td>
@@ -2500,6 +2897,16 @@
               <span class="cnt-val" id="val-acc-37">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(37, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-37" onclick="event.stopPropagation()" onchange="saveStep(37, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-37" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(37, this.value)">
@@ -2553,6 +2960,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(38, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-38" onclick="event.stopPropagation()" onchange="saveStep(38, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-38" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(38, this.value)">
           </td>
@@ -2604,6 +3021,16 @@
               <span class="cnt-val" id="val-acc-39">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(39, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-39" onclick="event.stopPropagation()" onchange="saveStep(39, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-39" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(39, this.value)">
@@ -2657,6 +3084,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(40, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-40" onclick="event.stopPropagation()" onchange="saveStep(40, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-40" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(40, this.value)">
           </td>
@@ -2708,6 +3145,16 @@
               <span class="cnt-val" id="val-acc-41">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(41, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-41" onclick="event.stopPropagation()" onchange="saveStep(41, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-41" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(41, this.value)">
@@ -2761,6 +3208,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(42, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-42" onclick="event.stopPropagation()" onchange="saveStep(42, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-42" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(42, this.value)">
           </td>
@@ -2812,6 +3269,16 @@
               <span class="cnt-val" id="val-acc-43">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(43, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-43" onclick="event.stopPropagation()" onchange="saveStep(43, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-43" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(43, this.value)">
@@ -2865,6 +3332,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(44, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-44" onclick="event.stopPropagation()" onchange="saveStep(44, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-44" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(44, this.value)">
           </td>
@@ -2916,6 +3393,16 @@
               <span class="cnt-val" id="val-acc-45">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(45, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-45" onclick="event.stopPropagation()" onchange="saveStep(45, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-45" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(45, this.value)">
@@ -2969,6 +3456,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(46, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-46" onclick="event.stopPropagation()" onchange="saveStep(46, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-46" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(46, this.value)">
           </td>
@@ -3020,6 +3517,16 @@
               <span class="cnt-val" id="val-acc-47">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(47, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-47" onclick="event.stopPropagation()" onchange="saveStep(47, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-47" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(47, this.value)">
@@ -3073,6 +3580,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(48, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-48" onclick="event.stopPropagation()" onchange="saveStep(48, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-48" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(48, this.value)">
           </td>
@@ -3124,6 +3641,16 @@
               <span class="cnt-val" id="val-acc-49">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(49, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-49" onclick="event.stopPropagation()" onchange="saveStep(49, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-49" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(49, this.value)">
@@ -3177,6 +3704,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(50, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-50" onclick="event.stopPropagation()" onchange="saveStep(50, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-50" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(50, this.value)">
           </td>
@@ -3228,6 +3765,16 @@
               <span class="cnt-val" id="val-acc-51">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(51, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-51" onclick="event.stopPropagation()" onchange="saveStep(51, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-51" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(51, this.value)">
@@ -3281,6 +3828,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(52, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-52" onclick="event.stopPropagation()" onchange="saveStep(52, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-52" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(52, this.value)">
           </td>
@@ -3332,6 +3889,16 @@
               <span class="cnt-val" id="val-acc-53">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(53, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-53" onclick="event.stopPropagation()" onchange="saveStep(53, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-53" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(53, this.value)">
@@ -3385,6 +3952,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(54, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-54" onclick="event.stopPropagation()" onchange="saveStep(54, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-54" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(54, this.value)">
           </td>
@@ -3436,6 +4013,16 @@
               <span class="cnt-val" id="val-acc-55">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(55, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-55" onclick="event.stopPropagation()" onchange="saveStep(55, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-55" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(55, this.value)">
@@ -3489,6 +4076,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(56, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-56" onclick="event.stopPropagation()" onchange="saveStep(56, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-56" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(56, this.value)">
           </td>
@@ -3540,6 +4137,16 @@
               <span class="cnt-val" id="val-acc-57">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(57, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-57" onclick="event.stopPropagation()" onchange="saveStep(57, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-57" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(57, this.value)">
@@ -3593,6 +4200,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(58, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-58" onclick="event.stopPropagation()" onchange="saveStep(58, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-58" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(58, this.value)">
           </td>
@@ -3644,6 +4261,16 @@
               <span class="cnt-val" id="val-acc-59">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(59, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-59" onclick="event.stopPropagation()" onchange="saveStep(59, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-59" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(59, this.value)">
@@ -3697,6 +4324,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(60, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-60" onclick="event.stopPropagation()" onchange="saveStep(60, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-60" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(60, this.value)">
           </td>
@@ -3748,6 +4385,16 @@
               <span class="cnt-val" id="val-acc-61">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(61, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-61" onclick="event.stopPropagation()" onchange="saveStep(61, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-61" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(61, this.value)">
@@ -3801,6 +4448,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(62, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-62" onclick="event.stopPropagation()" onchange="saveStep(62, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-62" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(62, this.value)">
           </td>
@@ -3852,6 +4509,16 @@
               <span class="cnt-val" id="val-acc-63">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(63, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-63" onclick="event.stopPropagation()" onchange="saveStep(63, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-63" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(63, this.value)">
@@ -3905,6 +4572,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(64, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-64" onclick="event.stopPropagation()" onchange="saveStep(64, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-64" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(64, this.value)">
           </td>
@@ -3956,6 +4633,16 @@
               <span class="cnt-val" id="val-acc-65">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(65, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-65" onclick="event.stopPropagation()" onchange="saveStep(65, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-65" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(65, this.value)">
@@ -4009,6 +4696,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(66, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-66" onclick="event.stopPropagation()" onchange="saveStep(66, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-66" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(66, this.value)">
           </td>
@@ -4060,6 +4757,16 @@
               <span class="cnt-val" id="val-acc-67">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(67, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-67" onclick="event.stopPropagation()" onchange="saveStep(67, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-67" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(67, this.value)">
@@ -4113,6 +4820,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(68, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-68" onclick="event.stopPropagation()" onchange="saveStep(68, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-68" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(68, this.value)">
           </td>
@@ -4164,6 +4881,16 @@
               <span class="cnt-val" id="val-acc-69">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(69, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-69" onclick="event.stopPropagation()" onchange="saveStep(69, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-69" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(69, this.value)">
@@ -4217,6 +4944,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(70, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-70" onclick="event.stopPropagation()" onchange="saveStep(70, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-70" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(70, this.value)">
           </td>
@@ -4268,6 +5005,16 @@
               <span class="cnt-val" id="val-acc-71">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(71, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-71" onclick="event.stopPropagation()" onchange="saveStep(71, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-71" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(71, this.value)">
@@ -4321,6 +5068,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(72, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-72" onclick="event.stopPropagation()" onchange="saveStep(72, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-72" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(72, this.value)">
           </td>
@@ -4372,6 +5129,16 @@
               <span class="cnt-val" id="val-acc-73">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(73, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-73" onclick="event.stopPropagation()" onchange="saveStep(73, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-73" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(73, this.value)">
@@ -4425,6 +5192,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(74, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-74" onclick="event.stopPropagation()" onchange="saveStep(74, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-74" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(74, this.value)">
           </td>
@@ -4476,6 +5253,16 @@
               <span class="cnt-val" id="val-acc-75">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(75, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-75" onclick="event.stopPropagation()" onchange="saveStep(75, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-75" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(75, this.value)">
@@ -4529,6 +5316,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(76, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-76" onclick="event.stopPropagation()" onchange="saveStep(76, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-76" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(76, this.value)">
           </td>
@@ -4580,6 +5377,16 @@
               <span class="cnt-val" id="val-acc-77">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(77, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-77" onclick="event.stopPropagation()" onchange="saveStep(77, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-77" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(77, this.value)">
@@ -4633,6 +5440,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(78, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-78" onclick="event.stopPropagation()" onchange="saveStep(78, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-78" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(78, this.value)">
           </td>
@@ -4684,6 +5501,16 @@
               <span class="cnt-val" id="val-acc-79">0</span>
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(79, 'acc', 1)">+</button>
             </div>
+          </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-79" onclick="event.stopPropagation()" onchange="saveStep(79, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
           </td>
           <td>
             <input class="notes-input" id="notes-79" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(79, this.value)">
@@ -4737,6 +5564,16 @@
               <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(80, 'acc', 1)">+</button>
             </div>
           </td>
+          <td style="text-align:center;">
+            <select class="step-select" id="step-80" onclick="event.stopPropagation()" onchange="saveStep(80, this.value)">
+              <option value="">- Step -</option>
+              <option value="Approach">Approach</option>
+              <option value="Probe">Probe</option>
+              <option value="Present">Present</option>
+              <option value="Listen">Listen</option>
+              <option value="Extend">Extend</option>
+            </select>
+          </td>
           <td>
             <input class="notes-input" id="notes-80" type="text" placeholder="Add note / device..." onclick="event.stopPropagation()" oninput="saveNote(80, this.value)">
           </td>
@@ -4751,6 +5588,7 @@
             <td style="text-align:center;" id="tot-srv">0</td>
             <td style="text-align:center;" id="tot-biz">0</td>
             <td style="text-align:center;" id="tot-acc">0</td>
+            <td style="text-align:center;">-</td>
             <td>-</td>
           </tr>
         </tfoot>
@@ -4759,7 +5597,7 @@
   </div>
 
 <script>
-  const STORAGE_KEY = "retail_store_attach_tracker_v4";
+  const STORAGE_KEY = "retail_store_attach_tracker_v5";
   const SYNC_TOPIC = "apple_retail_attach_tracker_shared_store_room";
   const CLIENT_ID = "client_" + Math.random().toString(36).substring(2, 10);
   
@@ -4774,6 +5612,7 @@
     services: 0,
     biz: 0,
     acc: 0,
+    step: "",
     notes: ""
   }));
 
@@ -4796,6 +5635,7 @@
             target.services = savedItem.services || 0;
             target.biz = savedItem.biz || 0;
             target.acc = savedItem.acc || 0;
+            target.step = savedItem.step || "";
             target.notes = savedItem.notes || "";
           }
         });
@@ -4819,14 +5659,14 @@
       currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
     } else {
       currentSort.column = col;
-      currentSort.direction = (col === 'name') ? 'asc' : 'desc';
+      currentSort.direction = (col === 'name' || col === 'step') ? 'asc' : 'desc';
     }
     updateSortHeaderIcons();
     reorderRows();
   }
 
   function updateSortHeaderIcons() {
-    const cols = ['name', 'slam', 'ac', 'upgrade', 'services', 'biz', 'acc'];
+    const cols = ['name', 'slam', 'ac', 'upgrade', 'services', 'biz', 'acc', 'step'];
     cols.forEach(c => {
       const th = document.getElementById(`th-${c}`);
       const icon = document.getElementById(`sort-icon-${c}`);
@@ -4860,6 +5700,9 @@
     } else if (currentSort.column === 'slam') {
       valA = getHitCount(a);
       valB = getHitCount(b);
+    } else if (currentSort.column === 'step') {
+      valA = (a.step || '').toLowerCase();
+      valB = (b.step || '').toLowerCase();
     } else {
       valA = a[currentSort.column] || 0;
       valB = b[currentSort.column] || 0;
@@ -4914,7 +5757,7 @@
       const divIn = document.createElement('tr');
       divIn.className = 'section-divider-row';
       divIn.id = 'header-checked-in';
-      divIn.innerHTML = `<td colspan="8" class="col-sticky">🟢 On Shift / Checked In (${checkedMembers.length})</td>`;
+      divIn.innerHTML = `<td colspan="9" class="col-sticky">🟢 On Shift / Checked In (${checkedMembers.length})</td>`;
       tbody.appendChild(divIn);
 
       checkedMembers.forEach(d => {
@@ -4927,7 +5770,7 @@
       const divOut = document.createElement('tr');
       divOut.className = 'section-divider-row';
       divOut.id = 'header-not-checked-in';
-      divOut.innerHTML = `<td colspan="8" class="col-sticky">⚪ Other Team Members (${uncheckedMembers.length})</td>`;
+      divOut.innerHTML = `<td colspan="9" class="col-sticky">⚪ Other Team Members (${uncheckedMembers.length})</td>`;
       tbody.appendChild(divOut);
 
       uncheckedMembers.forEach(d => {
@@ -4955,6 +5798,14 @@
     broadcastChange();
   }
 
+  function saveStep(index, val) {
+    data[index].step = val;
+    broadcastChange();
+    if (currentSort.column === 'step') {
+      setTimeout(reorderRows, 60);
+    }
+  }
+
   function saveNote(index, val) {
     data[index].notes = val;
     broadcastChange();
@@ -4971,6 +5822,11 @@
     if (elBiz) elBiz.textContent = data[i].biz;
     const elAcc = document.getElementById(`val-acc-${i}`);
     if (elAcc) elAcc.textContent = data[i].acc;
+
+    const stepSelect = document.getElementById(`step-${i}`);
+    if (stepSelect && document.activeElement !== stepSelect && stepSelect.value !== (data[i].step || '')) {
+      stepSelect.value = data[i].step || '';
+    }
 
     const noteInput = document.getElementById(`notes-${i}`);
     if (noteInput && document.activeElement !== noteInput && noteInput.value !== data[i].notes) {
@@ -5031,6 +5887,7 @@
     const q = document.getElementById("searchInput").value.toLowerCase();
     const role = document.getElementById("roleFilter").value;
     const checkinFilter = document.getElementById("checkinFilter").value;
+    const stepFilter = document.getElementById("stepFilter").value;
     const slamFilter = document.getElementById("slamFilter").value;
     let visibleCount = 0;
 
@@ -5038,6 +5895,7 @@
       const matchName = p.name.toLowerCase().includes(q);
       const matchRole = (role === "ALL" || p.role.toLowerCase() === role.toLowerCase());
       const matchCheckin = (checkinFilter === "ALL" || (checkinFilter === "IN" && p.checkedIn) || (checkinFilter === "OUT" && !p.checkedIn));
+      const matchStep = (stepFilter === "ALL" || p.step === stepFilter);
       const hits = getHitCount(p);
       let matchSlam = true;
       if (slamFilter === "SLAM") matchSlam = (hits === 5);
@@ -5045,7 +5903,7 @@
 
       const rowEl = document.getElementById(`row-${idx}`);
       if (rowEl) {
-        if (matchName && matchRole && matchCheckin && matchSlam) {
+        if (matchName && matchRole && matchCheckin && matchStep && matchSlam) {
           rowEl.style.display = "";
           visibleCount++;
         } else {
@@ -5063,7 +5921,7 @@
   }
 
   function resetCounts() {
-    if (confirm("Reset all sales metrics and check-ins to 0 across all devices?")) {
+    if (confirm("Reset all sales metrics, steps, and check-ins to 0 across all devices?")) {
       data.forEach((d, i) => {
         d.checkedIn = false;
         d.ac = 0;
@@ -5071,9 +5929,12 @@
         d.services = 0;
         d.biz = 0;
         d.acc = 0;
+        d.step = "";
         d.notes = "";
         const noteInput = document.getElementById(`notes-${i}`);
         if (noteInput) noteInput.value = "";
+        const stepSelect = document.getElementById(`step-${i}`);
+        if (stepSelect) stepSelect.value = "";
         renderCheckInVisual(i);
       });
       lastVersion = Date.now();
@@ -5085,13 +5946,13 @@
   }
 
   function exportCSV() {
-    let csv = "Checked In,Name,Job Title,Grand Slam Status (🏆),AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧),Notes\n";
+    let csv = "Checked In,Name,Job Title,Grand Slam Status (🏆),AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧),Apple Steps of Services,Notes\n";
     const exportData = [...data].sort((a, b) => (b.checkedIn ? 1 : 0) - (a.checkedIn ? 1 : 0));
     exportData.forEach(p => {
       const hits = getHitCount(p);
       const slamLabel = hits === 5 ? "GRAND SLAM (5/5) 🏆" : `${hits}/5`;
       const inStatus = p.checkedIn ? "Yes" : "No";
-      csv += `"${inStatus}","${p.name}","${p.role}","${slamLabel}",${p.ac},${p.upgrade},${p.services},${p.biz},${p.acc},"${p.notes}"\n`;
+      csv += `"${inStatus}","${p.name}","${p.role}","${slamLabel}",${p.ac},${p.upgrade},${p.services},${p.biz},${p.acc},"${p.step || ''}","${p.notes}"\n`;
     });
     const blob = new Blob([csv], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
@@ -5104,7 +5965,6 @@
   /* 🌐 ZERO-CONFIG REAL-TIME CLOUD SYNC ENGINE (Cross-Device via Secure WebSocket) */
   function initCloudSync() {
     try {
-      // Connect to global secure WebSocket broker
       const brokerUrl = "wss://broker.emqx.io:8084/mqtt";
       mqttClient = mqtt.connect(brokerUrl, {
         clientId: CLIENT_ID,
@@ -5116,14 +5976,12 @@
       mqttClient.on('connect', () => {
         setSyncBadge('🟢 Live Cloud Multi-Device Sync Active');
         mqttClient.subscribe(SYNC_TOPIC, { qos: 1 });
-        // Request latest state from any peer
         mqttClient.publish(SYNC_TOPIC + "/req", JSON.stringify({ clientId: CLIENT_ID, version: lastVersion }));
       });
 
       mqttClient.on('message', (topic, payload) => {
         try {
           const msg = JSON.parse(payload.toString());
-          // Peer requested state
           if (topic.endsWith('/req') && msg.clientId !== CLIENT_ID) {
             if (lastVersion > 0) {
               mqttClient.publish(SYNC_TOPIC, JSON.stringify({
@@ -5135,7 +5993,6 @@
             return;
           }
 
-          // Received state broadcast from another iPad/Mac
           if (msg.clientId !== CLIENT_ID && msg.data && msg.version && msg.version > lastVersion) {
             lastVersion = msg.version;
             msg.data.forEach(remote => {
@@ -5147,6 +6004,7 @@
                 local.services = remote.services;
                 local.biz = remote.biz;
                 local.acc = remote.acc;
+                local.step = remote.step || "";
                 local.notes = remote.notes;
               }
             });
