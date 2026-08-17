@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Store Performance & Attach Tracker</title>
+<!-- Lightweight MQTT over WebSockets for Instant Serverless Cloud Sync -->
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <style>
   :root {
     --bg-primary: #f2f2f7;
@@ -65,15 +67,19 @@
     display: flex;
     align-items: center;
     gap: 10px;
+    flex-wrap: wrap;
   }
   .sync-badge {
     font-size: 11px;
     font-weight: 600;
-    padding: 3px 8px;
+    padding: 4px 10px;
     border-radius: 12px;
     background: var(--bg-card);
     border: 1px solid var(--border);
     color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
 
   .btn-group {
@@ -421,7 +427,7 @@
   <div class="top-bar">
     <div class="app-title">
       🛍️ Store Attach & Grand Slam
-      <span class="sync-badge" id="syncStatus">🟢 Live Multi-Device Sync Active</span>
+      <span class="sync-badge" id="syncStatus">🔄 Connecting Cloud Sync...</span>
     </div>
     <div class="btn-group">
       <button class="secondary" onclick="checkAll(false)">◻️ Clear Check-Ins</button>
@@ -4753,6 +4759,10 @@
   </div>
 
 <script>
+  const STORAGE_KEY = "retail_store_attach_tracker_v4";
+  const SYNC_TOPIC = "apple_retail_attach_tracker_shared_store_room";
+  const CLIENT_ID = "client_" + Math.random().toString(36).substring(2, 10);
+  
   const teamRoster = [{"name": "Felipe Flores", "role": "Business Expert"}, {"name": "Edward Owens", "role": "Business Pro"}, {"name": "Brad Teegarden", "role": "Creative"}, {"name": "Joey Rocks", "role": "Creative"}, {"name": "Nicholas Yousif", "role": "Creative"}, {"name": "Paul Zaldivar", "role": "Creative"}, {"name": "Dawn Oree", "role": "Creative Pro"}, {"name": "Joe Davis", "role": "Creative Pro"}, {"name": "Kassie Sicairos", "role": "Creative Pro"}, {"name": "Andrew Portillo", "role": "Expert"}, {"name": "Patty Wigdahl", "role": "Expert"}, {"name": "Tiago Nocera", "role": "Expert"}, {"name": "Tom Antorietto Jr", "role": "Expert"}, {"name": "Dee Mitchell", "role": "Pro"}, {"name": "Chris White", "role": "Pro"}, {"name": "Michelle Trester", "role": "POP"}, {"name": "Adriel Guerrero", "role": "Specialist"}, {"name": "Aladin Bader", "role": "Specialist"}, {"name": "Alejandra Gomez", "role": "Specialist"}, {"name": "Andre Salehian", "role": "Specialist"}, {"name": "Angelo Montano", "role": "Specialist"}, {"name": "Brooke Polendo", "role": "Specialist"}, {"name": "Cesar Lopez Belmudez", "role": "Specialist"}, {"name": "Chanel Ammo", "role": "Specialist"}, {"name": "Chris Olivares Cuellar", "role": "Specialist"}, {"name": "Daniel Cuellar", "role": "Specialist"}, {"name": "Darla Co", "role": "Specialist"}, {"name": "Dennise Juarez Aguilar", "role": "Specialist"}, {"name": "Don Anders", "role": "Specialist"}, {"name": "Dylan Shaw", "role": "Specialist"}, {"name": "Farid Lopez", "role": "Specialist"}, {"name": "Felix Fazakerley", "role": "Specialist"}, {"name": "Francia Sanchez", "role": "Specialist"}, {"name": "Frank O'Connor", "role": "Specialist"}, {"name": "Halle Horning", "role": "Specialist"}, {"name": "Henry Avalos Martell", "role": "Specialist"}, {"name": "Jacob Olson", "role": "Specialist"}, {"name": "Jahkell Robins", "role": "Specialist"}, {"name": "Jake Opatz", "role": "Specialist"}, {"name": "Jamal Delaney", "role": "Specialist"}, {"name": "James O'Shea", "role": "Specialist"}, {"name": "Jay Jimenez", "role": "Specialist"}, {"name": "Josheiry Torres", "role": "Specialist"}, {"name": "Joshua Saradpon", "role": "Specialist"}, {"name": "Josh Wise", "role": "Specialist"}, {"name": "Josiah Bergstrom", "role": "Specialist"}, {"name": "Joyce Lam", "role": "Specialist"}, {"name": "Kaitlyn Villa", "role": "Specialist"}, {"name": "Kari DeVault", "role": "Specialist"}, {"name": "Ken Mata", "role": "Specialist"}, {"name": "Kevin Corona Lozada", "role": "Specialist"}, {"name": "Ke\u2019Ana Alonzo", "role": "Specialist"}, {"name": "Kristal", "role": "Specialist"}, {"name": "Lexi English", "role": "Specialist"}, {"name": "Liam McEwan", "role": "Specialist"}, {"name": "Loren Fish", "role": "Specialist"}, {"name": "Lucas Martinez", "role": "Specialist"}, {"name": "Luis Sosa", "role": "Specialist"}, {"name": "Luis Soto Jr", "role": "Specialist"}, {"name": "Melody Pauls", "role": "Specialist"}, {"name": "Michael Terrientes", "role": "Specialist"}, {"name": "Miranda Gonzalez", "role": "Specialist"}, {"name": "Natalie Gibson", "role": "Specialist"}, {"name": "Nick Avalos", "role": "Specialist"}, {"name": "Ofelia Carrillo", "role": "Specialist"}, {"name": "Peter Robinson", "role": "Specialist"}, {"name": "Ramon Beltran", "role": "Specialist"}, {"name": "Ray Johnson", "role": "Specialist"}, {"name": "Roanne Jans", "role": "Specialist"}, {"name": "Rob Koepp", "role": "Specialist"}, {"name": "Ron Ejanda", "role": "Specialist"}, {"name": "Sador Rusom", "role": "Specialist"}, {"name": "SKYLAR WARE", "role": "Specialist"}, {"name": "Thania Medina", "role": "Specialist"}, {"name": "Tommy Chambers", "role": "Specialist"}, {"name": "Trisha Nguyen", "role": "Specialist"}, {"name": "Valeria Jacobo", "role": "Specialist"}, {"name": "Zahra Rahmaan", "role": "Specialist"}, {"name": "Zion Maly", "role": "Specialist"}, {"name": "Delaine Downie", "role": "Tech and Merch Pro"}, {"name": "Sara Gharabaghli", "role": "Tech and Merch Pro"}];
   let data = teamRoster.map((p, i) => ({
     id: i,
@@ -4767,13 +4777,42 @@
     notes: ""
   }));
 
+  let lastVersion = 0;
+  let mqttClient = null;
+
+  // 1. Restore local cache immediately
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed.data)) {
+        lastVersion = parsed.version || 0;
+        parsed.data.forEach(savedItem => {
+          const target = data.find(d => d.name === savedItem.name);
+          if (target) {
+            target.checkedIn = !!savedItem.checkedIn;
+            target.ac = savedItem.ac || 0;
+            target.upgrade = savedItem.upgrade || 0;
+            target.services = savedItem.services || 0;
+            target.biz = savedItem.biz || 0;
+            target.acc = savedItem.acc || 0;
+            target.notes = savedItem.notes || "";
+          }
+        });
+      }
+    }
+  } catch(e) {}
+
+  function saveLocalState() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ data: data, version: lastVersion }));
+    } catch(e) {}
+  }
+
   let currentSort = {
     column: 'name',
     direction: 'asc'
   };
-
-  let lastSyncVersion = 0;
-  let isPushing = false;
 
   function setColumnSort(col) {
     if (currentSort.column === col) {
@@ -4835,7 +4874,7 @@
     data[index].checkedIn = !data[index].checkedIn;
     renderCheckInVisual(index);
     updateTotals();
-    syncPush();
+    broadcastChange();
     setTimeout(reorderRows, 60);
   }
 
@@ -4857,7 +4896,7 @@
       renderCheckInVisual(i);
     });
     updateTotals();
-    syncPush();
+    broadcastChange();
     setTimeout(reorderRows, 60);
   }
 
@@ -4913,12 +4952,12 @@
       }
     }
     updateTotals();
-    syncPush();
+    broadcastChange();
   }
 
   function saveNote(index, val) {
     data[index].notes = val;
-    syncPush();
+    broadcastChange();
   }
 
   function renderRow(i) {
@@ -4961,6 +5000,7 @@
   function updateTotals() {
     let totAc = 0, totUp = 0, totSrv = 0, totBiz = 0, totAcc = 0, totSlam = 0, totCheckin = 0;
     data.forEach((d, i) => {
+      renderCheckInVisual(i);
       renderRow(i);
       if (d.checkedIn) totCheckin++;
       totAc += d.ac;
@@ -5036,8 +5076,10 @@
         if (noteInput) noteInput.value = "";
         renderCheckInVisual(i);
       });
+      lastVersion = Date.now();
+      saveLocalState();
       updateTotals();
-      syncPush();
+      broadcastChange();
       setTimeout(reorderRows, 60);
     }
   }
@@ -5059,37 +5101,44 @@
     a.click();
   }
 
-  /* Real-Time Multi-Device Sync Engine */
-  async function syncPush() {
-    isPushing = true;
+  /* 🌐 ZERO-CONFIG REAL-TIME CLOUD SYNC ENGINE (Cross-Device via Secure WebSocket) */
+  function initCloudSync() {
     try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: data })
+      // Connect to global secure WebSocket broker
+      const brokerUrl = "wss://broker.emqx.io:8084/mqtt";
+      mqttClient = mqtt.connect(brokerUrl, {
+        clientId: CLIENT_ID,
+        clean: true,
+        connectTimeout: 4000,
+        reconnectPeriod: 3000
       });
-      if (res.ok) {
-        const json = await res.json();
-        lastSyncVersion = json.version;
-        setSyncBadge('🟢 Live Sync Connected');
-      }
-    } catch(e) {
-      setSyncBadge('🟡 Offline Mode');
-    } finally {
-      isPushing = false;
-    }
-  }
 
-  async function syncPoll() {
-    if (isPushing) return;
-    try {
-      const res = await fetch('/api/state?_=' + Date.now());
-      if (res.ok) {
-        const json = await res.json();
-        if (json.version && json.version > lastSyncVersion) {
-          lastSyncVersion = json.version;
-          if (Array.isArray(json.data)) {
-            json.data.forEach(remote => {
+      mqttClient.on('connect', () => {
+        setSyncBadge('🟢 Live Cloud Multi-Device Sync Active');
+        mqttClient.subscribe(SYNC_TOPIC, { qos: 1 });
+        // Request latest state from any peer
+        mqttClient.publish(SYNC_TOPIC + "/req", JSON.stringify({ clientId: CLIENT_ID, version: lastVersion }));
+      });
+
+      mqttClient.on('message', (topic, payload) => {
+        try {
+          const msg = JSON.parse(payload.toString());
+          // Peer requested state
+          if (topic.endsWith('/req') && msg.clientId !== CLIENT_ID) {
+            if (lastVersion > 0) {
+              mqttClient.publish(SYNC_TOPIC, JSON.stringify({
+                clientId: CLIENT_ID,
+                version: lastVersion,
+                data: data
+              }), { qos: 1, retain: true });
+            }
+            return;
+          }
+
+          // Received state broadcast from another iPad/Mac
+          if (msg.clientId !== CLIENT_ID && msg.data && msg.version && msg.version > lastVersion) {
+            lastVersion = msg.version;
+            msg.data.forEach(remote => {
               const local = data.find(d => d.name === remote.name);
               if (local) {
                 local.checkedIn = remote.checkedIn;
@@ -5099,18 +5148,39 @@
                 local.biz = remote.biz;
                 local.acc = remote.acc;
                 local.notes = remote.notes;
-                renderCheckInVisual(local.id);
-                renderRow(local.id);
               }
             });
+            saveLocalState();
             updateTotals();
             reorderRows();
+            setSyncBadge('🟢 Live Cloud Sync Active');
           }
-        }
-        setSyncBadge('🟢 Live Multi-Device Sync Connected');
-      }
+        } catch(err) {}
+      });
+
+      mqttClient.on('error', () => {
+        setSyncBadge('💾 Saved to iPad');
+      });
+
+      mqttClient.on('offline', () => {
+        setSyncBadge('💾 Saved to iPad');
+      });
     } catch(e) {
-      setSyncBadge('🟡 Standalone Mode');
+      setSyncBadge('💾 Saved to iPad');
+    }
+  }
+
+  function broadcastChange() {
+    lastVersion = Date.now();
+    saveLocalState();
+    if (mqttClient && mqttClient.connected) {
+      try {
+        mqttClient.publish(SYNC_TOPIC, JSON.stringify({
+          clientId: CLIENT_ID,
+          version: lastVersion,
+          data: data
+        }), { qos: 1, retain: true });
+      } catch(e) {}
     }
   }
 
@@ -5119,12 +5189,11 @@
     if (el) el.textContent = txt;
   }
 
-  // Start polling every 1.2 seconds
-  setInterval(syncPoll, 1200);
-  syncPoll();
-
+  // Initialize
   updateSortHeaderIcons();
   updateTotals();
+  reorderRows();
+  initCloudSync();
 </script>
 </body>
 </html>
