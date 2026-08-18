@@ -22,6 +22,9 @@
     --section-header-bg: #e5e5ea;
     --tab-bg: #e3e3e8;
     --tab-active-bg: #ffffff;
+    --podium-gold: linear-gradient(135deg, #ffe066, #f59e0b);
+    --podium-silver: linear-gradient(135deg, #e2e8f0, #94a3b8);
+    --podium-bronze: linear-gradient(135deg, #fed7aa, #ea580c);
   }
 
   @media (prefers-color-scheme: dark) {
@@ -188,6 +191,80 @@
     cursor: pointer;
   }
 
+  /* Top Performers Podium Section */
+  .top-performers-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+  .top-performers-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .top-performers-title {
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .top-performers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+  }
+  .performer-badge-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+    overflow: hidden;
+  }
+  .rank-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 800;
+    color: #1c1c1e;
+    flex-shrink: 0;
+  }
+  .rank-1 { background: var(--podium-gold); }
+  .rank-2 { background: var(--podium-silver); }
+  .rank-3 { background: var(--podium-bronze); }
+  .rank-star { background: var(--bg-card); border: 1px solid var(--border); }
+  
+  .performer-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+  }
+  .performer-name {
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .performer-stats {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
   /* KPI Grid */
   .kpi-grid {
     display: grid;
@@ -266,7 +343,7 @@
     overflow: hidden;
   }
   .table-wrapper {
-    max-height: 64vh;
+    max-height: 60vh;
     overflow-x: auto;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -509,7 +586,7 @@
     z-index: 30;
   }
 
-  /* History Logs Card (GB-Tracker Style) */
+  /* History Logs Card */
   .history-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
@@ -561,10 +638,11 @@
     </div>
   </div>
 
-  <!-- Timeframe Navigation Tabs (Exact GB-Tracker Style) -->
+  <!-- Timeframe Navigation Tabs -->
   <div class="timeframe-nav">
     <div class="segmented-control">
       <button class="tab-btn active" id="tab-daily" onclick="switchTab('daily')">📅 Daily (Live)</button>
+      <button class="tab-btn" id="tab-priorday" onclick="switchTab('priorday')">⏮️ Prior Day</button>
       <button class="tab-btn" id="tab-weekly" onclick="switchTab('weekly')">📊 Weekly</button>
       <button class="tab-btn" id="tab-monthly" onclick="switchTab('monthly')">🗓️ Monthly</button>
       <button class="tab-btn" id="tab-quarterly" onclick="switchTab('quarterly')">📈 Quarterly</button>
@@ -577,6 +655,18 @@
     </div>
   </div>
 
+  <!-- Top Performers Podium Section -->
+  <div class="top-performers-card" id="topPerformersSection">
+    <div class="top-performers-header">
+      <div class="top-performers-title">
+        <span>🌟 Top Performers</span>
+        <span style="font-size: 11px; font-weight: 500; color: var(--text-secondary);" id="topPerformersSubtitle">(Live Leaderboard)</span>
+      </div>
+      <span style="font-size: 11px; color: var(--text-secondary);">Highest Multi-Category Impact</span>
+    </div>
+    <div class="top-performers-grid" id="topPerformersGrid"></div>
+  </div>
+
   <!-- Summary Cards -->
   <div class="kpi-grid">
     <div class="kpi-card checkin">
@@ -584,7 +674,7 @@
       <span class="kpi-num" id="kpi-checkin" style="color: #34c759;">0 / 81</span>
     </div>
     <div class="kpi-card gold">
-      <span class="kpi-label">🏆 Grand Slam</span>
+      <span class="kpi-label" id="lbl-kpi-grandslam">🏆 Grand Slam</span>
       <span class="kpi-num" id="kpi-grandslam" style="color: #ff9500;">0</span>
     </div>
     <div class="kpi-card">
@@ -698,7 +788,7 @@
     </div>
   </div>
 
-  <!-- History Logs View Card (Exact GB-Tracker Style) -->
+  <!-- History Logs View Card -->
   <div class="history-card" id="historyCard">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
       <h2 style="font-size: 18px; font-weight: 700;">📜 Daily Shift Archive Logs</h2>
@@ -708,14 +798,14 @@
   </div>
 
 <script>
-  const STORAGE_KEY_LIVE = "pz_tracker_live_state_v9";
-  const STORAGE_KEY_HISTORY = "pz_tracker_history_records_v9";
+  const STORAGE_KEY_LIVE = "pz_tracker_live_state_v10";
+  const STORAGE_KEY_HISTORY = "pz_tracker_history_records_v10";
   const SYNC_TOPIC = "apple_retail_attach_tracker_shared_store_room";
   const CLIENT_ID = "client_" + Math.random().toString(36).substring(2, 10);
 
   const INITIAL_ROSTER = [{"name": "Felipe Flores", "role": "Business Expert"}, {"name": "Edward Owens", "role": "Business Pro"}, {"name": "Brad Teegarden", "role": "Creative"}, {"name": "Joey Rocks", "role": "Creative"}, {"name": "Nicholas Yousif", "role": "Creative"}, {"name": "Paul Zaldivar", "role": "Creative"}, {"name": "Dawn Oree", "role": "Creative Pro"}, {"name": "Joe Davis", "role": "Creative Pro"}, {"name": "Kassie Sicairos", "role": "Creative Pro"}, {"name": "Andrew Portillo", "role": "Expert"}, {"name": "Patty Wigdahl", "role": "Expert"}, {"name": "Tiago Nocera", "role": "Expert"}, {"name": "Tom Antorietto Jr", "role": "Expert"}, {"name": "Dee Mitchell", "role": "Pro"}, {"name": "Chris White", "role": "Pro"}, {"name": "Michelle Trester", "role": "POP"}, {"name": "Adriel Guerrero", "role": "Specialist"}, {"name": "Aladin Bader", "role": "Specialist"}, {"name": "Alejandra Gomez", "role": "Specialist"}, {"name": "Andre Salehian", "role": "Specialist"}, {"name": "Angelo Montano", "role": "Specialist"}, {"name": "Brooke Polendo", "role": "Specialist"}, {"name": "Cesar Lopez Belmudez", "role": "Specialist"}, {"name": "Chanel Ammo", "role": "Specialist"}, {"name": "Chris Olivares", "role": "Specialist"}, {"name": "Daniel Cuellar", "role": "Specialist"}, {"name": "Darla Co", "role": "Specialist"}, {"name": "Dennise Juarez Aguilar", "role": "Specialist"}, {"name": "Don Anders", "role": "Specialist"}, {"name": "Dylan Shaw", "role": "Specialist"}, {"name": "Farid Lopez", "role": "Specialist"}, {"name": "Felix Fazakerley", "role": "Specialist"}, {"name": "Francia Sanchez", "role": "Specialist"}, {"name": "Frank O'Connor", "role": "Specialist"}, {"name": "Halle Horning", "role": "Specialist"}, {"name": "Henry Avalos Martell", "role": "Specialist"}, {"name": "Jacob Olson", "role": "Specialist"}, {"name": "Jahkell Robins", "role": "Specialist"}, {"name": "Jake Opatz", "role": "Specialist"}, {"name": "Jamal Delaney", "role": "Specialist"}, {"name": "James O'Shea", "role": "Specialist"}, {"name": "Jay Jimenez", "role": "Specialist"}, {"name": "Josheiry Torres", "role": "Specialist"}, {"name": "Joshua Saradpon", "role": "Specialist"}, {"name": "Josh Wise", "role": "Specialist"}, {"name": "Josiah Bergstrom", "role": "Specialist"}, {"name": "Joyce Lam", "role": "Specialist"}, {"name": "Kaitlyn Villa", "role": "Specialist"}, {"name": "Kari DeVault", "role": "Specialist"}, {"name": "Ken Mata", "role": "Specialist"}, {"name": "Kevin Corona Lozada", "role": "Specialist"}, {"name": "Ke\u2019Ana Alonzo", "role": "Specialist"}, {"name": "Kristal", "role": "Specialist"}, {"name": "Lexi English", "role": "Specialist"}, {"name": "Liam McEwan", "role": "Specialist"}, {"name": "Loren Fish", "role": "Specialist"}, {"name": "Lucas Martinez", "role": "Specialist"}, {"name": "Luis Sosa", "role": "Specialist"}, {"name": "Luis Soto Jr", "role": "Specialist"}, {"name": "Melody Pauls", "role": "Specialist"}, {"name": "Michael Terrientes", "role": "Specialist"}, {"name": "Miranda Gonzalez", "role": "Specialist"}, {"name": "Natalie Gibson", "role": "Specialist"}, {"name": "Nick Avalos", "role": "Specialist"}, {"name": "Ofelia Carrillo", "role": "Specialist"}, {"name": "Peter Robinson", "role": "Specialist"}, {"name": "Ramon Beltran", "role": "Specialist"}, {"name": "Ray Johnson", "role": "Specialist"}, {"name": "Roanne Jans", "role": "Specialist"}, {"name": "Rob Koepp", "role": "Specialist"}, {"name": "Ron Ejanda", "role": "Specialist"}, {"name": "Sador Rusom", "role": "Specialist"}, {"name": "SKYLAR WARE", "role": "Specialist"}, {"name": "Thania Medina", "role": "Specialist"}, {"name": "Tommy Chambers", "role": "Specialist"}, {"name": "Trisha Nguyen", "role": "Specialist"}, {"name": "Valeria Jacobo", "role": "Specialist"}, {"name": "Zahra Rahmaan", "role": "Specialist"}, {"name": "Zion Maly", "role": "Specialist"}, {"name": "Delaine Downie", "role": "Tech and Merch Pro"}, {"name": "Sara Gharabaghli", "role": "Tech and Merch Pro"}];
 
-  let currentTab = 'daily'; // 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'history'
+  let currentTab = 'daily'; // 'daily' | 'priorday' | 'weekly' | 'monthly' | 'quarterly' | 'history'
   let selectedPeriodKey = 'current';
 
   // Live active shift data
@@ -856,9 +946,32 @@
     return hits;
   }
 
+  function getTotalUnits(p) {
+    return (p.ac || 0) + (p.upgrade || 0) + (p.services || 0) + (p.biz || 0) + (p.acc || 0);
+  }
+
   function getDisplayList() {
     if (currentTab === 'daily') {
       return data;
+    }
+
+    if (currentTab === 'priorday') {
+      if (historyRecords.length > 0) {
+        return historyRecords[0].data || [];
+      }
+      return INITIAL_ROSTER.map((item, idx) => ({
+        id: idx,
+        name: item.name,
+        role: item.role,
+        checkedIn: false,
+        ac: 0,
+        upgrade: 0,
+        services: 0,
+        biz: 0,
+        acc: 0,
+        step: "-",
+        notes: ""
+      }));
     }
 
     let relevantRecords = [];
@@ -966,8 +1079,8 @@
       valA = a.name.toLowerCase();
       valB = b.name.toLowerCase();
     } else if (currentSort.column === 'slam') {
-      valA = currentTab === 'daily' ? getHitCount(a) : (a.slamsAchieved || 0);
-      valB = currentTab === 'daily' ? getHitCount(b) : (b.slamsAchieved || 0);
+      valA = (currentTab === 'daily' || currentTab === 'priorday') ? getHitCount(a) : (a.slamsAchieved || 0);
+      valB = (currentTab === 'daily' || currentTab === 'priorday') ? getHitCount(b) : (b.slamsAchieved || 0);
     } else if (currentSort.column === 'step') {
       valA = (a.step || '').toLowerCase();
       valB = (b.step || '').toLowerCase();
@@ -981,12 +1094,64 @@
     return a.name.localeCompare(b.name);
   }
 
+  function renderTopPerformersPodium() {
+    const container = document.getElementById('topPerformersGrid');
+    const subtitle = document.getElementById('topPerformersSubtitle');
+    if (!container) return;
+
+    const list = getDisplayList();
+    if (list.length === 0) {
+      container.innerHTML = '<div style="color:var(--text-secondary); font-size:12px;">No active data available for this view.</div>';
+      return;
+    }
+
+    if (currentTab === 'daily') subtitle.textContent = '(Live Shift Leaderboard)';
+    else if (currentTab === 'priorday') subtitle.textContent = '(Prior Shift Leaderboard)';
+    else subtitle.textContent = `(${currentTab.toUpperCase()} Leaderboard)`;
+
+    // Score based on Grand Slam hits + total units
+    const sortedPerformers = [...list].sort((a, b) => {
+      const hitsA = (currentTab === 'daily' || currentTab === 'priorday') ? getHitCount(a) : (a.slamsAchieved || 0);
+      const hitsB = (currentTab === 'daily' || currentTab === 'priorday') ? getHitCount(b) : (b.slamsAchieved || 0);
+      if (hitsB !== hitsA) return hitsB - hitsA;
+      return getTotalUnits(b) - getTotalUnits(a);
+    }).filter(p => getTotalUnits(p) > 0 || (currentTab === 'daily' && p.checkedIn)).slice(0, 4);
+
+    if (sortedPerformers.length === 0) {
+      container.innerHTML = '<div style="color:var(--text-secondary); font-size:12px; padding:6px 0;">Log metrics or check in staff to see top performers.</div>';
+      return;
+    }
+
+    container.innerHTML = '';
+    sortedPerformers.forEach((p, idx) => {
+      const hits = (currentTab === 'daily' || currentTab === 'priorday') ? getHitCount(p) : (p.slamsAchieved || 0);
+      const units = getTotalUnits(p);
+      let rankClass = "rank-star";
+      let rankIcon = "⭐";
+      if (idx === 0) { rankClass = "rank-1"; rankIcon = "🥇"; }
+      else if (idx === 1) { rankClass = "rank-2"; rankIcon = "🥈"; }
+      else if (idx === 2) { rankClass = "rank-3"; rankIcon = "🥉"; }
+
+      const item = document.createElement('div');
+      item.className = 'performer-badge-card';
+      item.innerHTML = `
+        <div class="rank-icon ${rankClass}">${rankIcon}</div>
+        <div class="performer-info">
+          <span class="performer-name">${escapeHtml(p.name)}</span>
+          <span class="performer-stats">${hits === 5 || (currentTab !== 'daily' && hits > 0) ? '🏆 ' + hits + ' Slams' : hits + '/5 categories'} • ${units} units</span>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  }
+
   function buildRowElement(p) {
     const isLive = (currentTab === 'daily');
+    const isPrior = (currentTab === 'priorday');
     const tr = document.createElement('tr');
     tr.id = `row-${p.id}`;
     if (p.checkedIn) tr.classList.add('checked-in-row');
-    if (isLive && getHitCount(p) === 5) tr.classList.add('grand-slam-row');
+    if ((isLive || isPrior) && getHitCount(p) === 5) tr.classList.add('grand-slam-row');
 
     if (isLive) {
       tr.innerHTML = `
@@ -1049,6 +1214,31 @@
           <input class="notes-input" id="notes-${p.id}" type="text" placeholder="Add note / focus..." value="${escapeHtml(p.notes || '')}" onclick="event.stopPropagation()" oninput="saveNote(${p.id}, this.value)">
         </td>
       `;
+    } else if (isPrior) {
+      const hits = getHitCount(p);
+      let slamBadge = `<span class="badge-progress">${hits}/5</span>`;
+      if (hits === 5) slamBadge = `<span class="badge-grand-slam">🏆 GRAND SLAM!</span>`;
+      else if (hits === 4) slamBadge = `<span class="badge-progress almost">🎯 4/5 (1 Away)</span>`;
+
+      tr.innerHTML = `
+        <td class="col-sticky">
+          <div class="name-cell-wrap" style="cursor: default;">
+            <span class="chk-badge">${p.checkedIn ? '✅' : '◻️'}</span>
+            <div class="name-cell">
+              <span class="member-name">${escapeHtml(p.name)}</span>
+              <span class="role-tag">${escapeHtml(p.role)}</span>
+            </div>
+          </div>
+        </td>
+        <td style="text-align:center;">${slamBadge}</td>
+        <td style="text-align:center;"><span class="aggregate-val">${p.ac}</span></td>
+        <td style="text-align:center;"><span class="aggregate-val">${p.upgrade}</span></td>
+        <td style="text-align:center;"><span class="aggregate-val">${p.services}</span></td>
+        <td style="text-align:center;"><span class="aggregate-val">${p.biz}</span></td>
+        <td style="text-align:center;"><span class="aggregate-val">${p.acc}</span></td>
+        <td style="text-align:center;"><span style="color:var(--text-secondary); font-size:12px;">${p.step || '-'}</span></td>
+        <td><span style="color:var(--text-secondary); font-size:12px;">${p.notes || '-'}</span></td>
+      `;
     } else {
       const slamBadge = p.slamsAchieved > 0 
         ? `<span class="badge-grand-slam">🏆 ${p.slamsAchieved} Grand Slam${p.slamsAchieved > 1 ? 's' : ''}</span>`
@@ -1091,6 +1281,8 @@
         renderRow(p.id);
       }
     });
+
+    renderTopPerformersPodium();
   }
 
   function toggleCheckIn(index) {
@@ -1178,6 +1370,7 @@
     }
 
     filterTable();
+    renderTopPerformersPodium();
   }
 
   function updateCounts(index, metric, delta) {
@@ -1198,6 +1391,7 @@
     }
     updateTotals();
     broadcastChange();
+    renderTopPerformersPodium();
   }
 
   function saveStep(index, val) {
@@ -1275,6 +1469,9 @@
         renderRow(d.id);
         if (d.checkedIn) totCheckin++;
         if (getHitCount(d) === 5) totSlam++;
+      } else if (currentTab === 'priorday') {
+        if (d.checkedIn) totCheckin++;
+        if (getHitCount(d) === 5) totSlam++;
       } else {
         if (d.shiftsWorked > 0) totCheckin += d.shiftsWorked;
         totSlam += (d.slamsAchieved || 0);
@@ -1287,8 +1484,9 @@
     });
 
     const isLive = (currentTab === 'daily');
-    document.getElementById("lbl-kpi-checkin").textContent = isLive ? "👥 Checked In" : "👥 Total Shifts";
-    document.getElementById("kpi-checkin").textContent = isLive ? `${totCheckin} / ${list.length}` : `${totCheckin} Shifts`;
+    const isPrior = (currentTab === 'priorday');
+    document.getElementById("lbl-kpi-checkin").textContent = (isLive || isPrior) ? "👥 Checked In" : "👥 Total Shifts";
+    document.getElementById("kpi-checkin").textContent = (isLive || isPrior) ? `${totCheckin} / ${list.length}` : `${totCheckin} Shifts`;
     document.getElementById("kpi-grandslam").textContent = totSlam;
     document.getElementById("kpi-ac").textContent = totAc;
     document.getElementById("kpi-upgrade").textContent = totUp;
@@ -1297,7 +1495,7 @@
     document.getElementById("kpi-acc").textContent = totAcc;
 
     document.getElementById("tot-name").textContent = isLive ? "TOTAL STORE SCORE" : `${currentTab.toUpperCase()} TOTAL`;
-    document.getElementById("tot-slam").textContent = isLive ? `${totSlam} / ${list.length}` : `${totSlam} Slams`;
+    document.getElementById("tot-slam").textContent = (isLive || isPrior) ? `${totSlam} / ${list.length}` : `${totSlam} Slams`;
     document.getElementById("tot-ac").textContent = totAc;
     document.getElementById("tot-up").textContent = totUp;
     document.getElementById("tot-srv").textContent = totSrv;
@@ -1322,14 +1520,14 @@
     list.forEach(p => {
       const matchName = p.name.toLowerCase().includes(q);
       const matchRole = (role === "ALL" || p.role.toLowerCase() === role.toLowerCase());
-      const isChecked = currentTab === 'daily' ? p.checkedIn : (p.shiftsWorked > 0);
+      const isChecked = (currentTab === 'daily' || currentTab === 'priorday') ? p.checkedIn : (p.shiftsWorked > 0);
       const matchCheckin = (checkinFilter === "ALL" || (checkinFilter === "IN" && isChecked) || (checkinFilter === "OUT" && !isChecked));
       const matchStep = (currentTab !== 'daily' || stepFilter === "ALL" || p.step === stepFilter);
       
-      const hits = currentTab === 'daily' ? getHitCount(p) : (p.slamsAchieved > 0 ? 5 : 0);
+      const hits = (currentTab === 'daily' || currentTab === 'priorday') ? getHitCount(p) : (p.slamsAchieved > 0 ? 5 : 0);
       let matchSlam = true;
-      if (slamFilter === "SLAM") matchSlam = (currentTab === 'daily' ? hits === 5 : p.slamsAchieved > 0);
-      if (slamFilter === "NEAR") matchSlam = (currentTab === 'daily' ? hits === 4 : false);
+      if (slamFilter === "SLAM") matchSlam = (currentTab === 'daily' || currentTab === 'priorday') ? hits === 5 : p.slamsAchieved > 0;
+      if (slamFilter === "NEAR") matchSlam = (currentTab === 'daily' || currentTab === 'priorday') ? hits === 4 : false;
 
       const rowEl = document.getElementById(`row-${p.id}`);
       if (rowEl) {
@@ -1350,7 +1548,7 @@
     document.getElementById("teamCount").textContent = `${visibleCount} Team Members`;
   }
 
-  /* 📑 TAB SWITCHING LOGIC (Exact GB-Tracker Style) */
+  /* 📑 TAB SWITCHING LOGIC */
   function switchTab(tab) {
     currentTab = tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -1387,6 +1585,13 @@
       btnReset.style.display = 'inline-flex';
       document.getElementById('th-notes').textContent = 'Notes / Focus';
       document.getElementById('tot-notes').textContent = '-';
+    } else if (tab === 'priorday') {
+      periodSelector.style.display = 'none';
+      btnArchive.style.display = 'none';
+      btnClearCheckins.style.display = 'none';
+      btnReset.style.display = 'none';
+      document.getElementById('th-notes').textContent = 'Notes / Focus';
+      document.getElementById('tot-notes').textContent = historyRecords.length > 0 ? `Archive: ${historyRecords[0].date}` : 'No Prior Day Data';
     } else {
       periodSelector.style.display = 'inline-block';
       btnArchive.style.display = 'none';
@@ -1647,9 +1852,10 @@
 
   function exportCSV() {
     let csv = `PZ Tracker Export (${currentTab.toUpperCase()})\n`;
-    if (currentTab === 'daily') {
+    if (currentTab === 'daily' || currentTab === 'priorday') {
       csv += "Checked In,Name,Job Title,Grand Slam Status (🏆),AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧),Apple Steps of Services,Notes\n";
-      const exportData = [...data].sort((a, b) => (b.checkedIn ? 1 : 0) - (a.checkedIn ? 1 : 0));
+      const list = getDisplayList();
+      const exportData = [...list].sort((a, b) => (b.checkedIn ? 1 : 0) - (a.checkedIn ? 1 : 0));
       exportData.forEach(p => {
         const hits = getHitCount(p);
         const slamLabel = hits === 5 ? "GRAND SLAM (5/5) 🏆" : `${hits}/5`;
