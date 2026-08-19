@@ -125,10 +125,14 @@
     color: #ff453a;
     border: 1px solid rgba(255, 69, 58, 0.25);
   }
-  button.success {
-    background: rgba(52, 199, 89, 0.15);
-    color: #34c759;
-    border: 1px solid rgba(52, 199, 89, 0.3);
+  button.undo-btn {
+    background: rgba(255, 149, 0, 0.15);
+    color: #ff9500;
+    border: 1px solid rgba(255, 149, 0, 0.35);
+  }
+  button.undo-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 
   /* Segmented Navigation Tabs */
@@ -628,10 +632,11 @@
     <div class="app-title">
       🛍️ PZ Tracker
       <span class="sync-badge" id="syncStatus">🔄 Connecting Cloud Sync...</span>
-      <span class="sync-badge" id="autoSaveBadge">⏰ Auto-Archive: 11:00 PM Daily</span>
+      <span class="sync-badge" id="autoSaveBadge">⏰ Auto-Archive: 8:59 PM Daily</span>
     </div>
     <div class="btn-group">
-      <button class="success" id="btnArchive" onclick="archiveCurrentDay()">💾 Save / Archive Day</button>
+      <button class="undo-btn" id="btnUndo" onclick="undoLastAction()" title="Undo last change">↩️ Undo</button>
+      <button class="secondary" id="btnArchive" onclick="archiveCurrentDay()">💾 Save / Archive Day</button>
       <button class="secondary" id="btnClearCheckins" onclick="checkAll(false)">◻️ Clear Check-Ins</button>
       <button class="secondary" onclick="exportCSV()">📥 Export CSV</button>
       <button class="danger" id="btnReset" onclick="resetCounts()">🔄 Reset Day</button>
@@ -845,6 +850,15 @@
     return `${year}-${month}-${day}`;
   }
 
+  function parseDateSafe(dateStr) {
+    if (!dateStr) return new Date();
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+    return new Date(dateStr);
+  }
+
   function getWeekNumber(date) {
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
     const dayNum = d.getUTCDay() || 7;
@@ -901,6 +915,39 @@
       localStorage.setItem(STORAGE_KEY_LIVE, JSON.stringify({ data: data, version: lastVersion }));
       localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(historyRecords));
     } catch(e) {}
+  }
+
+  // Undo History Stack (Max 25 actions)
+  let undoStack = [];
+
+  function pushUndoSnapshot() {
+    undoStack.push(JSON.stringify(data));
+    if (undoStack.length > 25) undoStack.shift();
+    updateUndoButtonState();
+  }
+
+  function undoLastAction() {
+    if (currentTab !== 'daily' || undoStack.length === 0) return;
+    const previousStateJSON = undoStack.pop();
+    const previousState = JSON.parse(previousStateJSON);
+    
+    data = previousState;
+    lastVersion = Date.now();
+    saveLocalState();
+    broadcastChange();
+    
+    renderTableStructure();
+    updateTotals();
+    reorderRows();
+    updateUndoButtonState();
+    flashAutoSaveBadge("↩️ Undid Last Action");
+  }
+
+  function updateUndoButtonState() {
+    const btn = document.getElementById('btnUndo');
+    if (btn) {
+      btn.disabled = (currentTab !== 'daily' || undoStack.length === 0);
+    }
   }
 
   let currentSort = {
@@ -982,12 +1029,12 @@
         const curWeek = getWeekNumber(now);
         const curYear = now.getFullYear();
         relevantRecords = historyRecords.filter(r => {
-          const rd = new Date(r.date);
+          const rd = parseDateSafe(r.date);
           return getWeekNumber(rd) === curWeek && rd.getFullYear() === curYear;
         });
       } else {
         relevantRecords = historyRecords.filter(r => {
-          const rd = new Date(r.date);
+          const rd = parseDateSafe(r.date);
           return `${rd.getFullYear()}-W${getWeekNumber(rd)}` === selectedPeriodKey;
         });
       }
@@ -996,12 +1043,12 @@
         const curMon = now.getMonth();
         const curYear = now.getFullYear();
         relevantRecords = historyRecords.filter(r => {
-          const rd = new Date(r.date);
+          const rd = parseDateSafe(r.date);
           return rd.getMonth() === curMon && rd.getFullYear() === curYear;
         });
       } else {
         relevantRecords = historyRecords.filter(r => {
-          const rd = new Date(r.date);
+          const rd = parseDateSafe(r.date);
           const key = `${rd.getFullYear()}-${String(rd.getMonth() + 1).padStart(2, '0')}`;
           return key === selectedPeriodKey;
         });
@@ -1009,9 +1056,9 @@
     } else if (currentTab === 'quarterly') {
       if (selectedPeriodKey === 'current') {
         const curQ = getQuarterString(now);
-        relevantRecords = historyRecords.filter(r => getQuarterString(new Date(r.date)) === curQ);
+        relevantRecords = historyRecords.filter(r => getQuarterString(parseDateSafe(r.date)) === curQ);
       } else {
-        relevantRecords = historyRecords.filter(r => getQuarterString(new Date(r.date)) === selectedPeriodKey);
+        relevantRecords = historyRecords.filter(r => getQuarterString(parseDateSafe(r.date)) === selectedPeriodKey);
       }
     }
 
@@ -1289,6 +1336,7 @@
     if (currentTab !== 'daily') return;
     const member = data.find(d => d.id === index);
     if (!member) return;
+    pushUndoSnapshot();
     member.checkedIn = !member.checkedIn;
     renderCheckInVisual(index);
     updateTotals();
@@ -1313,6 +1361,7 @@
 
   function checkAll(status) {
     if (currentTab !== 'daily') return;
+    pushUndoSnapshot();
     data.forEach(d => {
       d.checkedIn = status;
       renderCheckInVisual(d.id);
@@ -1378,6 +1427,7 @@
     const member = data.find(d => d.id === index);
     if (!member) return;
 
+    pushUndoSnapshot();
     member[metric] = Math.max(0, member[metric] + delta);
     if (member[metric] > 0 && !member.checkedIn) {
       member.checkedIn = true;
@@ -1398,6 +1448,7 @@
     if (currentTab !== 'daily') return;
     const member = data.find(d => d.id === index);
     if (!member) return;
+    pushUndoSnapshot();
     member.step = val;
     broadcastChange();
     if (currentSort.column === 'step') {
@@ -1558,6 +1609,7 @@
     const mainTableCard = document.getElementById('mainTableCard');
     const historyCard = document.getElementById('historyCard');
     const filterPanel = document.getElementById('filterPanel');
+    const btnUndo = document.getElementById('btnUndo');
     const btnArchive = document.getElementById('btnArchive');
     const btnClearCheckins = document.getElementById('btnClearCheckins');
     const btnReset = document.getElementById('btnReset');
@@ -1567,6 +1619,7 @@
       historyCard.style.display = 'block';
       periodSelector.style.display = 'none';
       filterPanel.style.display = 'none';
+      if (btnUndo) btnUndo.style.display = 'none';
       btnArchive.style.display = 'none';
       btnClearCheckins.style.display = 'none';
       btnReset.style.display = 'none';
@@ -1580,6 +1633,7 @@
 
     if (tab === 'daily') {
       periodSelector.style.display = 'none';
+      if (btnUndo) btnUndo.style.display = 'inline-flex';
       btnArchive.style.display = 'inline-flex';
       btnClearCheckins.style.display = 'inline-flex';
       btnReset.style.display = 'inline-flex';
@@ -1587,6 +1641,7 @@
       document.getElementById('tot-notes').textContent = '-';
     } else if (tab === 'priorday') {
       periodSelector.style.display = 'none';
+      if (btnUndo) btnUndo.style.display = 'none';
       btnArchive.style.display = 'none';
       btnClearCheckins.style.display = 'none';
       btnReset.style.display = 'none';
@@ -1594,6 +1649,7 @@
       document.getElementById('tot-notes').textContent = historyRecords.length > 0 ? `Archive: ${historyRecords[0].date}` : 'No Prior Day Data';
     } else {
       periodSelector.style.display = 'inline-block';
+      if (btnUndo) btnUndo.style.display = 'none';
       btnArchive.style.display = 'none';
       btnClearCheckins.style.display = 'none';
       btnReset.style.display = 'none';
@@ -1606,6 +1662,7 @@
     updateSortHeaderIcons();
     updateTotals();
     reorderRows();
+    updateUndoButtonState();
   }
 
   function populatePeriodSelector(tab) {
@@ -1619,7 +1676,7 @@
       
       const weekSet = new Set();
       historyRecords.forEach(r => {
-        const d = new Date(r.date);
+        const d = parseDateSafe(r.date);
         weekSet.add(`${d.getFullYear()}-W${getWeekNumber(d)}`);
       });
       weekSet.forEach(w => {
@@ -1630,7 +1687,7 @@
       
       const monthSet = new Set();
       historyRecords.forEach(r => {
-        const d = new Date(r.date);
+        const d = parseDateSafe(r.date);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         monthSet.add(key);
       });
@@ -1644,7 +1701,7 @@
       
       const qSet = new Set();
       historyRecords.forEach(r => {
-        qSet.add(getQuarterString(new Date(r.date)));
+        qSet.add(getQuarterString(parseDateSafe(r.date)));
       });
       qSet.forEach(q => {
         sel.innerHTML += `<option value="${q}">📈 ${q}</option>`;
@@ -1700,47 +1757,76 @@
       badge.style.borderColor = '#34c759';
       badge.style.color = '#34c759';
       setTimeout(() => {
-        badge.textContent = '⏰ Auto-Archive: 11:00 PM Daily';
+        badge.textContent = '⏰ Auto-Archive: 8:59 PM Daily';
         badge.style.borderColor = '';
         badge.style.color = '';
       }, 10000);
     }
   }
 
-  /* ⏰ 11:00 PM DAILY AUTO-ARCHIVE ENGINE */
-  function setupDailyAutoArchive() {
-    function scheduleNext11PM() {
-      const now = new Date();
-      const target = new Date();
-      target.setHours(23, 0, 0, 0); // 11:00:00 PM local time
+  /* ⏰ HOURLY AUTO-SAVE & 8:59 PM DAILY AUTO-ARCHIVE ENGINE */
+  function setupAutoEngines() {
+    let lastHourlySaveHour = -1;
 
-      if (now.getTime() >= target.getTime()) {
-        target.setDate(target.getDate() + 1);
+    function runEngines() {
+      const now = new Date();
+      const curHour = now.getHours();
+      const curMin = now.getMinutes();
+      const today = getTodayString();
+
+      // 1. Hourly State Checkpoint (every hour on the hour)
+      if (curHour !== lastHourlySaveHour) {
+        lastHourlySaveHour = curHour;
+        saveLocalState();
+        flashAutoSaveBadge(`💾 Auto-Saved Hourly Checkpoint (${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})`);
       }
 
-      const msUntil11PM = target.getTime() - now.getTime();
-      setTimeout(() => {
-        const hasActiveData = data.some(d => d.checkedIn || d.ac > 0 || d.upgrade > 0 || d.services > 0 || d.biz > 0 || d.acc > 0);
-        if (hasActiveData) {
-          archiveCurrentDay(true);
+      // 2. 8:59 PM EOD Archive + Auto-Rollover to Prior Day (20:59 or later)
+      const isPast859PM = (curHour === 20 && curMin >= 59) || (curHour >= 21);
+      if (isPast859PM) {
+        const alreadyArchivedToday = historyRecords.some(r => r.date === today);
+        const hasActiveData = data.some(d => d.checkedIn || (d.ac + d.upgrade + d.services + d.biz + d.acc) > 0);
+
+        if (hasActiveData && !alreadyArchivedToday) {
+          // Archive today's complete shift
+          const snapshot = {
+            date: today,
+            timestamp: Date.now(),
+            data: JSON.parse(JSON.stringify(data))
+          };
+          historyRecords.unshift(snapshot);
+
+          // Reset live daily board for next morning
+          data.forEach(d => {
+            d.checkedIn = false;
+            d.ac = 0;
+            d.upgrade = 0;
+            d.services = 0;
+            d.biz = 0;
+            d.acc = 0;
+            d.step = "";
+            d.notes = "";
+          });
+
+          lastVersion = Date.now();
+          saveLocalState();
+          broadcastChange();
+          flashAutoSaveBadge(`🌙 Shift Archived at 8:59 PM (Moved to Prior Day)`);
+
+          if (currentTab === 'daily') {
+            renderTableStructure();
+            updateTotals();
+            reorderRows();
+          } else if (currentTab === 'priorday' || currentTab === 'history') {
+            switchTab(currentTab);
+          }
         }
-        scheduleNext11PM();
-      }, msUntil11PM);
+      }
     }
 
-    setInterval(() => {
-      const now = new Date();
-      if (now.getHours() === 23 && now.getMinutes() === 0) {
-        const today = getTodayString();
-        const alreadyArchivedToday = historyRecords.some(r => r.date === today);
-        const hasActiveData = data.some(d => d.checkedIn || d.ac > 0 || d.upgrade > 0 || d.services > 0 || d.biz > 0 || d.acc > 0);
-        if (hasActiveData && !alreadyArchivedToday) {
-          archiveCurrentDay(true);
-        }
-      }
-    }, 60000);
-
-    scheduleNext11PM();
+    // Check every 30 seconds
+    setInterval(runEngines, 30000);
+    runEngines();
   }
 
   function renderHistoryList() {
@@ -1977,7 +2063,7 @@
   updateTotals();
   reorderRows();
   initCloudSync();
-  setupDailyAutoArchive();
+  setupAutoEngines();
 </script>
 </body>
 </html>
