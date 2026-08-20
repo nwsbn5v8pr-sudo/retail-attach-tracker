@@ -773,7 +773,7 @@
     <div class="app-title">
       🛍️ PZ Tracker
       <span class="sync-badge" id="syncStatus">🔄 Connecting Cloud Sync...</span>
-      <span class="sync-badge" id="autoSaveBadge">⏰ Auto-Archive: 8:59 PM Daily</span>
+      <span class="sync-badge" id="autoSaveBadge">⏰ Auto-Save: 8:59 PM • Daily Reset: 11:59 PM</span>
     </div>
     <div class="btn-group">
       <button class="undo-btn" id="btnUndo" onclick="undoLastAction()" title="Undo last change">↩️ Undo</button>
@@ -1979,7 +1979,7 @@
     }
   }
 
-  /* ⏰ HOURLY AUTO-SAVE & 8:59 PM DAILY AUTO-ARCHIVE ENGINE */
+  /* ⏰ HOURLY AUTO-SAVE, 8:59 PM AUTO-SNAPSHOT & 11:59 PM MIDNIGHT RESET ENGINE */
   function setupAutoEngines() {
     let lastHourlySaveHour = -1;
 
@@ -1997,20 +1997,27 @@
         flashAutoSaveBadge(`💾 Auto-Saved Hourly Checkpoint (${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})`);
       }
 
-      // 2. 8:59 PM EOD Archive + Auto-Rollover to Prior Day (20:59 or later)
+      // 2. 8:59 PM Auto-Snapshot to Prior Day (Non-Destructive: does NOT delete same-day live data)
       const isPast859PM = (curHour === 20 && curMin >= 59) || (curHour >= 21);
       if (isPast859PM) {
-        const alreadyArchivedToday = historyRecords.some(r => r.date === today);
         const hasActiveData = data.some(d => d.checkedIn || (d.ac + d.upgrade + d.services + d.biz + d.acc) > 0);
+        if (hasActiveData) {
+          saveCurrentDay(true); // Non-destructive save & roll to Prior Day, Weekly, Monthly, Quarterly
+        }
+      }
 
-        if (hasActiveData && !alreadyArchivedToday) {
-          // Archive today's complete shift
-          const snapshot = {
-            date: today,
-            timestamp: Date.now(),
-            data: JSON.parse(JSON.stringify(data))
-          };
-          historyRecords.unshift(snapshot);
+      // 3. 11:59 PM Midnight EOD Reset (Clears live daily board for next morning)
+      const isMidnightReset = (curHour === 23 && curMin >= 59);
+      if (isMidnightReset) {
+        const alreadyResetKey = 'pz_tracker_midnight_reset_' + today;
+        let alreadyReset = false;
+        try {
+          alreadyReset = localStorage.getItem(alreadyResetKey) === 'true';
+        } catch(e) {}
+
+        if (!alreadyReset) {
+          // Ensure final snapshot saved before wiping
+          saveCurrentDay(true);
 
           // Reset live daily board for next morning
           data.forEach(d => {
@@ -2024,10 +2031,14 @@
             d.notes = "";
           });
 
+          try {
+            localStorage.setItem(alreadyResetKey, 'true');
+          } catch(e) {}
+
           lastVersion = Date.now();
           saveLocalState();
           broadcastChange();
-          flashAutoSaveBadge(`🌙 Shift Archived at 8:59 PM (Moved to Prior Day)`);
+          flashAutoSaveBadge(`🌙 Daily Shift Closed (Board Reset for Next Morning)`);
 
           if (currentTab === 'daily') {
             renderTableStructure();
