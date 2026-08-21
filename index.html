@@ -776,6 +776,7 @@
       <span class="sync-badge" id="autoSaveBadge">⏰ Auto-Save: 8:59 PM • Daily Reset: 11:59 PM</span>
     </div>
     <div class="btn-group">
+      <button class="secondary" id="btnAddMember" onclick="promptAddTeamMember()" title="Add new team member">➕ Add Team Member</button>
       <button class="undo-btn" id="btnUndo" onclick="undoLastAction()" title="Undo last change">↩️ Undo</button>
       <button class="secondary" id="btnLock" onclick="lockDeviceNow()" title="Lock this iPad with store PIN">🔒 Lock</button>
       <button class="secondary" id="btnSave" onclick="saveCurrentDay(false)">💾 Save Day</button>
@@ -1819,6 +1820,81 @@
     document.getElementById("teamCount").textContent = `${visibleCount} Team Members`;
   }
 
+  /* ➕ ADD TEAM MEMBER LOGIC */
+  function promptAddTeamMember() {
+    const name = prompt("Enter team member's full name:");
+    if (!name || !name.trim()) return;
+
+    const trimmedName = name.trim();
+
+    // Prevent duplicate entries
+    if (data.some(d => d.name.toLowerCase() === trimmedName.toLowerCase())) {
+      alert(`⚠️ "${trimmedName}" is already on the roster.`);
+      return;
+    }
+
+    const availableRoles = [
+      "Specialist",
+      "Expert",
+      "Creative",
+      "Creative Pro",
+      "Business Pro",
+      "Business Expert",
+      "Pro",
+      "Tech and Merch Pro",
+      "POP"
+    ];
+
+    const roleChoice = prompt(
+      `Enter role for ${trimmedName}:\n\n` +
+      availableRoles.map((r, i) => `${i + 1}. ${r}`).join("\n"),
+      "1"
+    );
+
+    if (roleChoice === null) return;
+
+    let selectedRole = "Specialist";
+    const roleIdx = parseInt(roleChoice, 10) - 1;
+    if (!isNaN(roleIdx) && roleIdx >= 0 && roleIdx < availableRoles.length) {
+      selectedRole = availableRoles[roleIdx];
+    } else if (roleChoice.trim()) {
+      // If user typed out the role name directly
+      const match = availableRoles.find(r => r.toLowerCase() === roleChoice.trim().toLowerCase());
+      selectedRole = match || roleChoice.trim();
+    }
+
+    pushUndoSnapshot();
+
+    const newId = data.length > 0 ? Math.max(...data.map(d => d.id)) + 1 : 0;
+    const newMember = {
+      id: newId,
+      name: trimmedName,
+      role: selectedRole,
+      checkedIn: true, // Automatically check in new addition
+      ac: 0,
+      upgrade: 0,
+      services: 0,
+      biz: 0,
+      acc: 0,
+      step: "",
+      notes: ""
+    };
+
+    data.push(newMember);
+    INITIAL_ROSTER.push({ name: trimmedName, role: selectedRole });
+
+    lastVersion = Date.now();
+    saveLocalState();
+    broadcastChange();
+
+    renderTableStructure();
+    updateTotals();
+    reorderRows();
+    updateUndoButtonState();
+
+    flashAutoSaveBadge(`✅ Added ${trimmedName}`);
+  }
+
   /* 📑 TAB SWITCHING LOGIC */
   function switchTab(tab) {
     currentTab = tab;
@@ -1833,6 +1909,7 @@
     const btnArchive = document.getElementById('btnArchive');
     const btnClearCheckins = document.getElementById('btnClearCheckins');
     const btnReset = document.getElementById('btnReset');
+    const btnAddMember = document.getElementById('btnAddMember');
 
     if (tab === 'history') {
       mainTableCard.style.display = 'none';
@@ -1843,6 +1920,7 @@
       btnArchive.style.display = 'none';
       btnClearCheckins.style.display = 'none';
       btnReset.style.display = 'none';
+      if (btnAddMember) btnAddMember.style.display = 'none';
       renderHistoryList();
       return;
     }
@@ -1857,6 +1935,7 @@
       if (btnSave) btnSave.style.display = 'inline-flex';
       btnClearCheckins.style.display = 'inline-flex';
       btnReset.style.display = 'inline-flex';
+      if (btnAddMember) btnAddMember.style.display = 'inline-flex';
       document.getElementById('th-notes').textContent = 'Notes / Focus';
       document.getElementById('tot-notes').textContent = '-';
     } else if (tab === 'priorday') {
@@ -1865,6 +1944,7 @@
       if (btnSave) btnSave.style.display = 'none';
       btnClearCheckins.style.display = 'none';
       btnReset.style.display = 'none';
+      if (btnAddMember) btnAddMember.style.display = 'none';
       document.getElementById('th-notes').textContent = 'Notes / Focus';
       document.getElementById('tot-notes').textContent = historyRecords.length > 0 ? `Archive: ${historyRecords[0].date}` : 'No Prior Day Data';
     } else {
@@ -1873,6 +1953,7 @@
       if (btnSave) btnSave.style.display = 'none';
       btnClearCheckins.style.display = 'none';
       btnReset.style.display = 'none';
+      if (btnAddMember) btnAddMember.style.display = 'none';
       document.getElementById('th-notes').textContent = 'Performance Pace';
       document.getElementById('tot-notes').textContent = 'Store Summary';
       populatePeriodSelector(tab);
