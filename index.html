@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>🛍️ PZ Tracker</title>
+<title>🛍️ PZ Scoreboard</title>
 <!-- Lightweight MQTT over WebSockets for Instant Serverless Cloud Sync -->
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <style>
@@ -771,7 +771,7 @@
   <!-- Top Action Bar -->
   <div class="top-bar">
     <div class="app-title">
-      🛍️ PZ Tracker
+      🛍️ PZ Scoreboard
       <span class="sync-badge" id="syncStatus">🔄 Connecting Cloud Sync...</span>
       <span class="sync-badge" id="autoSaveBadge">⏰ Auto-Save: 8:59 PM • Daily Reset: 11:59 PM</span>
     </div>
@@ -2215,7 +2215,7 @@
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.setAttribute("href", url);
-    a.setAttribute("download", `PZ_Tracker_Archive_${rec.date}.csv`);
+    a.setAttribute("download", `PZ_Scoreboard_Archive_${rec.date}.csv`);
     a.click();
   }
 
@@ -2245,7 +2245,7 @@
   }
 
   function exportCSV() {
-    let csv = `PZ Tracker Export (${currentTab.toUpperCase()})\n`;
+    let csv = `PZ Scoreboard Export (${currentTab.toUpperCase()})\n`;
     if (currentTab === 'daily' || currentTab === 'priorday') {
       csv += "Checked In,Name,Job Title,Grand Slam Status (🏆),AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧),Apple Steps of Services,Notes\n";
       const list = getDisplayList();
@@ -2268,7 +2268,7 @@
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.setAttribute("href", url);
-    a.setAttribute("download", `PZ_Tracker_${currentTab.toUpperCase()}_Report.csv`);
+    a.setAttribute("download", `PZ_Scoreboard_${currentTab.toUpperCase()}_Report.csv`);
     a.click();
   }
 
