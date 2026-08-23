@@ -949,6 +949,7 @@
   const STORAGE_KEY_LIVE = "pz_tracker_live_state_v10";
   const STORAGE_KEY_HISTORY = "pz_tracker_history_records_v10";
   const STORAGE_KEY_AUTH = "pz_tracker_auth_unlocked_ts";
+  const STORAGE_KEY_LIVE_DAY = "pz_tracker_live_day_v10";
   const STORE_PASSCODE = "1984"; // 4-digit passcode for store access
   const PIN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour expiry (in ms)
   const SYNC_TOPIC = "apple_retail_attach_tracker_shared_store_room";
@@ -1255,8 +1256,17 @@
     }
 
     if (currentTab === 'priorday') {
-      if (historyRecords.length > 0) {
-        return historyRecords[0].data || [];
+      // "Prior Day" = the most recent saved record strictly BEFORE today.
+      // Using historyRecords[0] directly was wrong because auto-saves
+      // (hourly / 8:59 PM) re-save TODAY into that same slot, so Prior Day
+      // could end up showing today's own live data instead of yesterday's.
+      const todayStr = getTodayString();
+      const priorRecord = historyRecords
+        .filter(r => r.date !== todayStr)
+        .sort((a, b) => parseDateSafe(b.date) - parseDateSafe(a.date))[0];
+
+      if (priorRecord) {
+        return priorRecord.data || [];
       }
       return INITIAL_ROSTER.map((item, idx) => ({
         id: idx,
@@ -1334,20 +1344,28 @@
     });
 
     if (selectedPeriodKey === 'current') {
-      data.forEach(p => {
-        if (memberMap[p.name]) {
-          if (p.checkedIn) {
-            memberMap[p.name].shiftsWorked += 1;
-            memberMap[p.name].checkedIn = true;
+      // Only fold in today's LIVE in-memory data if today hasn't already
+      // been archived into historyRecords — otherwise today's numbers would
+      // be counted twice (once from `data`, once from its own history entry
+      // picked up by relevantRecords below).
+      const todayStr = getTodayString();
+      const todayAlreadyArchived = historyRecords.some(r => r.date === todayStr);
+      if (!todayAlreadyArchived) {
+        data.forEach(p => {
+          if (memberMap[p.name]) {
+            if (p.checkedIn) {
+              memberMap[p.name].shiftsWorked += 1;
+              memberMap[p.name].checkedIn = true;
+            }
+            memberMap[p.name].ac += p.ac;
+            memberMap[p.name].upgrade += p.upgrade;
+            memberMap[p.name].services += p.services;
+            memberMap[p.name].biz += p.biz;
+            memberMap[p.name].acc += p.acc;
+            if (getHitCount(p) === 5) memberMap[p.name].slamsAchieved += 1;
           }
-          memberMap[p.name].ac += p.ac;
-          memberMap[p.name].upgrade += p.upgrade;
-          memberMap[p.name].services += p.services;
-          memberMap[p.name].biz += p.biz;
-          memberMap[p.name].acc += p.acc;
-          if (getHitCount(p) === 5) memberMap[p.name].slamsAchieved += 1;
-        }
-      });
+        });
+      }
     }
 
     relevantRecords.forEach(rec => {
@@ -2098,6 +2116,62 @@
   }
 
   /* ⏰ HOURLY AUTO-SAVE, 8:59 PM AUTO-SNAPSHOT & 11:59 PM MIDNIGHT RESET ENGINE */
+
+  // 📅 Robust day-rollover: archives `data` to the date it actually belongs
+  // to and clears the board for a new day. This does NOT depend on the app
+  // being open at a precise minute (8:59 PM / 11:59 PM) — it simply compares
+  // "what day is the live board currently tracking?" vs. "what day is it
+  // right now?" every time this runs (on load, and every 30s tick). If the
+  // iPad was asleep, the tab was closed, or the passcode gate was up at
+  // midnight, the very next time the app is opened it catches up correctly:
+  // saves the stale day to Prior Day / History (which also feeds Weekly,
+  // Monthly, Quarterly), then resets the live board for today.
+  function rolloverDayIfNeeded() {
+    let liveDay;
+    try {
+      liveDay = localStorage.getItem(STORAGE_KEY_LIVE_DAY);
+    } catch(e) { liveDay = null; }
+
+    const todayStr = getTodayString();
+
+    if (!liveDay) {
+      // First run ever on this device — just stamp today, nothing to roll over.
+      try { localStorage.setItem(STORAGE_KEY_LIVE_DAY, todayStr); } catch(e) {}
+      return false;
+    }
+
+    if (liveDay === todayStr) {
+      return false; // Still the same day, nothing to do.
+    }
+
+    // The live board belongs to a previous day — archive it under that date
+    // (not today's date), then reset the board for the new day.
+    const hasActiveData = data.some(d => d.checkedIn || (d.ac + d.upgrade + d.services + d.biz + d.acc) > 0);
+    if (hasActiveData) {
+      saveCurrentDay(true, liveDay); // Save under the day it belongs to
+    }
+
+    data.forEach(d => {
+      d.checkedIn = false;
+      d.ac = 0;
+      d.upgrade = 0;
+      d.services = 0;
+      d.biz = 0;
+      d.acc = 0;
+      d.step = "";
+      d.notes = "";
+      d.updatedAt = Date.now();
+    });
+
+    try { localStorage.setItem(STORAGE_KEY_LIVE_DAY, todayStr); } catch(e) {}
+
+    lastVersion = Date.now();
+    saveLocalState();
+    broadcastChange();
+    flashAutoSaveBadge(`🌙 New Day Started — ${liveDay} Archived to History`);
+    return true;
+  }
+
   function setupAutoEngines() {
     let lastHourlySaveHour = -1;
 
@@ -2106,6 +2180,21 @@
       const curHour = now.getHours();
       const curMin = now.getMinutes();
       const today = getTodayString();
+
+      // 0. Date-based rollover catch-up — runs every tick regardless of the
+      // exact time, so a missed 8:59/11:59 window (device asleep, tab
+      // closed, gate locked) is corrected the moment the app is next active.
+      const rolledOver = rolloverDayIfNeeded();
+      if (rolledOver) {
+        if (currentTab === 'daily') {
+          renderTableStructure();
+          updateTotals();
+          reorderRows();
+        } else if (currentTab === 'priorday' || currentTab === 'history' ||
+                   currentTab === 'weekly' || currentTab === 'monthly' || currentTab === 'quarterly') {
+          switchTab(currentTab);
+        }
+      }
 
       // 1. Hourly State Checkpoint + Passcode Gate Recheck
       if (curHour !== lastHourlySaveHour) {
@@ -2152,6 +2241,7 @@
 
           try {
             localStorage.setItem(alreadyResetKey, 'true');
+            localStorage.setItem(STORAGE_KEY_LIVE_DAY, today);
           } catch(e) {}
 
           lastVersion = Date.now();
