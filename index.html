@@ -1046,7 +1046,8 @@
     biz: 0,
     acc: 0,
     step: "",
-    notes: ""
+    notes: "",
+    updatedAt: 0
   }));
 
   // Historical archived daily shifts
@@ -1137,6 +1138,7 @@
           target.acc = savedItem.acc || 0;
           target.step = savedItem.step || "";
           target.notes = savedItem.notes || "";
+          target.updatedAt = savedItem.updatedAt || 0;
         });
       }
     }
@@ -1180,7 +1182,9 @@
     const previousState = JSON.parse(previousStateJSON);
     
     data = previousState;
-    lastVersion = Date.now();
+    const undoTs = Date.now();
+    data.forEach(d => { d.updatedAt = undoTs; });
+    lastVersion = undoTs;
     saveLocalState();
     broadcastChange();
     
@@ -1586,6 +1590,7 @@
     if (!member) return;
     pushUndoSnapshot();
     member.checkedIn = !member.checkedIn;
+    member.updatedAt = Date.now();
     renderCheckInVisual(index);
     updateTotals();
     broadcastChange();
@@ -1612,6 +1617,7 @@
     pushUndoSnapshot();
     data.forEach(d => {
       d.checkedIn = status;
+      d.updatedAt = Date.now();
       renderCheckInVisual(d.id);
     });
     updateTotals();
@@ -1677,6 +1683,7 @@
 
     pushUndoSnapshot();
     member[metric] = Math.max(0, member[metric] + delta);
+    member.updatedAt = Date.now();
     if (member[metric] > 0 && !member.checkedIn) {
       member.checkedIn = true;
       renderCheckInVisual(index);
@@ -1698,6 +1705,7 @@
     if (!member) return;
     pushUndoSnapshot();
     member.step = val;
+    member.updatedAt = Date.now();
     broadcastChange();
     if (currentSort.column === 'step') {
       setTimeout(reorderRows, 60);
@@ -1709,6 +1717,7 @@
     const member = data.find(d => d.id === index);
     if (!member) return;
     member.notes = val;
+    member.updatedAt = Date.now();
     broadcastChange();
   }
 
@@ -1904,7 +1913,8 @@
       biz: 0,
       acc: 0,
       step: "",
-      notes: ""
+      notes: "",
+      updatedAt: Date.now()
     };
 
     data.push(newMember);
@@ -2137,6 +2147,7 @@
             d.acc = 0;
             d.step = "";
             d.notes = "";
+            d.updatedAt = Date.now();
           });
 
           try {
@@ -2213,6 +2224,8 @@
     if (!rec) return;
     if (confirm(`Load shift from ${rec.date} into your Live Daily tracker? Current unsaved live counts will be overwritten.`)) {
       data = JSON.parse(JSON.stringify(rec.data));
+      const restoreTs = Date.now();
+      data.forEach(d => { d.updatedAt = restoreTs; });
       lastVersion = Date.now();
       saveLocalState();
       switchTab('daily');
@@ -2257,6 +2270,7 @@
         d.acc = 0;
         d.step = "";
         d.notes = "";
+        d.updatedAt = Date.now();
         const noteInput = document.getElementById(`notes-${d.id}`);
         if (noteInput) noteInput.value = "";
         const stepSelect = document.getElementById(`step-${d.id}`);
@@ -2331,11 +2345,32 @@
             return;
           }
 
-          if (msg.clientId !== CLIENT_ID && msg.data && msg.version && msg.version > lastVersion) {
-            lastVersion = msg.version;
+          if (msg.clientId !== CLIENT_ID && msg.data) {
+            // Per-record merge: only overwrite a team member's fields if the
+            // incoming record is newer than what we have locally for THAT
+            // person. This prevents one device's change from wiping out an
+            // unrelated (or even the same) team member's more recent edit
+            // made on another device — no more "last full snapshot wins".
+            let appliedAnyChange = false;
             msg.data.forEach(remote => {
-              const local = data.find(d => d.name === remote.name);
-              if (local) {
+              const remoteTs = remote.updatedAt || 0;
+              let local = data.find(d => d.name === remote.name);
+
+              if (!local) {
+                // Team member exists remotely but not locally yet (e.g. added
+                // via Add Team Member on another device) — adopt them.
+                local = Object.assign({}, remote);
+                local.id = data.length > 0 ? Math.max(...data.map(d => d.id)) + 1 : 0;
+                data.push(local);
+                if (!INITIAL_ROSTER.some(m => m.name === local.name)) {
+                  INITIAL_ROSTER.push({ name: local.name, role: local.role });
+                }
+                appliedAnyChange = true;
+                return;
+              }
+
+              const localTs = local.updatedAt || 0;
+              if (remoteTs > localTs) {
                 local.checkedIn = remote.checkedIn;
                 local.ac = remote.ac;
                 local.upgrade = remote.upgrade;
@@ -2344,21 +2379,42 @@
                 local.acc = remote.acc;
                 local.step = remote.step || "";
                 local.notes = remote.notes;
+                local.updatedAt = remoteTs;
+                appliedAnyChange = true;
               }
             });
+
             if (Array.isArray(msg.history)) {
-              historyRecords = msg.history;
+              // Merge history by date instead of blind overwrite, keeping
+              // whichever record per date is newest.
+              msg.history.forEach(remoteRec => {
+                const idx = historyRecords.findIndex(r => r.date === remoteRec.date);
+                if (idx === -1) {
+                  historyRecords.push(remoteRec);
+                  appliedAnyChange = true;
+                } else if ((remoteRec.timestamp || 0) > (historyRecords[idx].timestamp || 0)) {
+                  historyRecords[idx] = remoteRec;
+                  appliedAnyChange = true;
+                }
+              });
             }
-            saveLocalState();
-            if (currentTab === 'daily') {
-              updateTotals();
-              reorderRows();
-            } else if (currentTab === 'history') {
-              renderHistoryList();
-            } else {
-              renderTableStructure();
-              updateTotals();
-              reorderRows();
+
+            if (msg.version && msg.version > lastVersion) {
+              lastVersion = msg.version;
+            }
+
+            if (appliedAnyChange) {
+              saveLocalState();
+              if (currentTab === 'daily') {
+                updateTotals();
+                reorderRows();
+              } else if (currentTab === 'history') {
+                renderHistoryList();
+              } else {
+                renderTableStructure();
+                updateTotals();
+                reorderRows();
+              }
             }
             setSyncBadge('🟢 Live Multi-Device Sync Active');
           }
