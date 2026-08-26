@@ -952,10 +952,7 @@
   const STORAGE_KEY_LIVE_DAY = "pz_tracker_live_day_v10";
   const STORE_PASSCODE = "1984"; // 4-digit passcode for store access
   const PIN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour expiry (in ms)
-  const STORE_ID = "PZ_CHANGE_ME"; // set once to something unique to your store (e.g. store number)
-  const SYNC_TOPIC = "apple_retail_attach_tracker_" + STORE_ID;
-  const STORAGE_KEY_DELETED_DATES = "pz_tracker_deleted_history_dates_v10";
-  let deletedHistoryDates = [];
+  const SYNC_TOPIC = "apple_retail_attach_tracker_shared_store_room";
   const CLIENT_ID = "client_" + Math.random().toString(36).substring(2, 10);
 
   let enteredPin = "";
@@ -1158,19 +1155,10 @@
     }
   } catch(e) {}
 
-  try {
-    const savedDeleted = localStorage.getItem(STORAGE_KEY_DELETED_DATES);
-    if (savedDeleted) {
-      const parsed = JSON.parse(savedDeleted);
-      if (Array.isArray(parsed)) deletedHistoryDates = parsed;
-    }
-  } catch(e) {}
-
   function saveLocalState() {
     try {
       localStorage.setItem(STORAGE_KEY_LIVE, JSON.stringify({ data: data, version: lastVersion }));
       localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(historyRecords));
-      localStorage.setItem(STORAGE_KEY_DELETED_DATES, JSON.stringify(deletedHistoryDates));
     } catch(e) {}
   }
 
@@ -2048,7 +2036,7 @@
         weekSet.add(`${d.getFullYear()}-W${getWeekNumber(d)}`);
       });
       weekSet.forEach(w => {
-        sel.innerHTML += `
+        sel.innerHTML += `<option value="${w}">📊 Week ${w.split('-W')[1]} (${w.split('-W')[0]})</option>`;
       });
     } else if (tab === 'monthly') {
       sel.innerHTML += `<option value="current">📅 This Month (${getMonthString(now)})</option>`;
@@ -2086,41 +2074,6 @@
     reorderRows();
   }
 
-  // Merges two history-record `data` arrays person-by-person, keeping whichever
-  // side's entry for that person has the newer `updatedAt`. This prevents one
-  // device's full-day archive from silently clobbering another device's edits
-  // to the SAME day just because its overall save happened a moment later.
-  function mergeHistoryPersonData(localData, remoteData) {
-    const merged = Array.isArray(localData) ? JSON.parse(JSON.stringify(localData)) : [];
-    const byName = {};
-    merged.forEach(p => { byName[p.name] = p; });
-
-    (remoteData || []).forEach(remote => {
-      const local = byName[remote.name];
-      if (!local) {
-        const copy = JSON.parse(JSON.stringify(remote));
-        merged.push(copy);
-        byName[remote.name] = copy;
-        return;
-      }
-      const remoteTs = remote.updatedAt || 0;
-      const localTs = local.updatedAt || 0;
-      if (remoteTs > localTs) {
-        local.checkedIn = remote.checkedIn;
-        local.ac = remote.ac;
-        local.upgrade = remote.upgrade;
-        local.services = remote.services;
-        local.biz = remote.biz;
-        local.acc = remote.acc;
-        local.step = remote.step || "";
-        local.notes = remote.notes;
-        local.updatedAt = remoteTs;
-      }
-    });
-
-    return merged;
-  }
-
   /* 💾 SAVE & HISTORY LOGIC (Non-Destructive) */
   function saveCurrentDay(silent = false, targetDate = null) {
     const today = targetDate || getTodayString();
@@ -2133,12 +2086,7 @@
     };
 
     if (existingIdx >= 0) {
-      const mergedData = mergeHistoryPersonData(historyRecords[existingIdx].data, snapshot.data);
-      historyRecords[existingIdx] = {
-        date: today,
-        timestamp: Math.max(historyRecords[existingIdx].timestamp || 0, snapshot.timestamp),
-        data: mergedData
-      };
+      historyRecords[existingIdx] = snapshot;
     } else {
       historyRecords.unshift(snapshot);
     }
@@ -2218,9 +2166,8 @@
     try { localStorage.setItem(STORAGE_KEY_LIVE_DAY, todayStr); } catch(e) {}
 
     lastVersion = Date.now();
-    saveLocalState(); // intentionally NOT calling broadcastChange() here —
-                       // the bulk zero-reset must stay local to this device only,
-                       // otherwise it wipes other devices' still-live same-day data.
+    saveLocalState();
+    broadcastChange();
     flashAutoSaveBadge(`🌙 New Day Started — ${liveDay} Archived to History`);
     return true;
   }
@@ -2298,7 +2245,8 @@
           } catch(e) {}
 
           lastVersion = Date.now();
-          saveLocalState(); // intentionally not broadcasting the zero-reset (see rolloverDayIfNeeded)
+          saveLocalState();
+          broadcastChange();
           flashAutoSaveBadge(`🌙 Daily Shift Closed (Board Reset for Next Morning)`);
 
           if (currentTab === 'daily') {
@@ -2364,7 +2312,7 @@
   function restoreHistoryToLive(idx) {
     const rec = historyRecords[idx];
     if (!rec) return;
-    if (confirm(`⚠️ Load shift from ${rec.date} into Live Daily?\n\nThis will overwrite TODAY'S live counts on THIS DEVICE AND ALL OTHER SYNCED DEVICES in the store right now. This cannot be undone with the Undo button. Continue?`)) {
+    if (confirm(`Load shift from ${rec.date} into your Live Daily tracker? Current unsaved live counts will be overwritten.`)) {
       data = JSON.parse(JSON.stringify(rec.data));
       const restoreTs = Date.now();
       data.forEach(d => { d.updatedAt = restoreTs; });
@@ -2376,16 +2324,10 @@
   }
 
   function deleteHistoryRecord(idx) {
-    const rec = historyRecords[idx];
-    if (!rec) return;
-    if (confirm(`Permanently remove record for ${rec.date}? This will also remove it from all synced devices.`)) {
-      if (!deletedHistoryDates.includes(rec.date)) {
-        deletedHistoryDates.push(rec.date);
-      }
+    if (confirm(`Permanently remove record for ${historyRecords[idx].date}?`)) {
       historyRecords.splice(idx, 1);
       saveLocalState();
       renderHistoryList();
-      broadcastChange();
     }
   }
 
@@ -2475,7 +2417,6 @@
       mqttClient.on('connect', () => {
         setSyncBadge('🟢 Live Multi-Device Sync Active');
         mqttClient.subscribe(SYNC_TOPIC, { qos: 1 });
-        mqttClient.subscribe(SYNC_TOPIC + "/req", { qos: 1 }); // fixed: actually listen for sync requests
         mqttClient.publish(SYNC_TOPIC + "/req", JSON.stringify({ clientId: CLIENT_ID, version: lastVersion }));
       });
 
@@ -2488,8 +2429,7 @@
                 clientId: CLIENT_ID,
                 version: lastVersion,
                 data: data,
-                history: historyRecords,
-                deleted: deletedHistoryDates
+                history: historyRecords
               }), { qos: 1, retain: true });
             }
             return;
@@ -2502,21 +2442,6 @@
             // unrelated (or even the same) team member's more recent edit
             // made on another device — no more "last full snapshot wins".
             let appliedAnyChange = false;
-
-            // Absorb deletion tombstones first, and purge any matching local
-            // records so deletions actually stick regardless of arrival order.
-            if (Array.isArray(msg.deleted)) {
-              msg.deleted.forEach(d => {
-                if (!deletedHistoryDates.includes(d)) {
-                  deletedHistoryDates.push(d);
-                  appliedAnyChange = true;
-                }
-              });
-              const beforeLen = historyRecords.length;
-              historyRecords = historyRecords.filter(r => !deletedHistoryDates.includes(r.date));
-              if (historyRecords.length !== beforeLen) appliedAnyChange = true;
-            }
-
             msg.data.forEach(remote => {
               const remoteTs = remote.updatedAt || 0;
               let local = data.find(d => d.name === remote.name);
@@ -2550,28 +2475,16 @@
             });
 
             if (Array.isArray(msg.history)) {
-              // Merge history PER PERSON (not whole-record-wins-by-timestamp).
-              // Two devices can both archive the same date with different
-              // people's numbers being more up to date on each side — this
-              // keeps the newer `updatedAt` per person from either side
-              // instead of letting one device's snapshot fully replace the other's.
-              // Also skips any date that's been tombstoned as deleted.
+              // Merge history by date instead of blind overwrite, keeping
+              // whichever record per date is newest.
               msg.history.forEach(remoteRec => {
-                if (deletedHistoryDates.includes(remoteRec.date)) return;
                 const idx = historyRecords.findIndex(r => r.date === remoteRec.date);
                 if (idx === -1) {
                   historyRecords.push(remoteRec);
                   appliedAnyChange = true;
-                } else {
-                  const beforeJSON = JSON.stringify(historyRecords[idx].data);
-                  const mergedData = mergeHistoryPersonData(historyRecords[idx].data, remoteRec.data);
-                  const afterJSON = JSON.stringify(mergedData);
-                  historyRecords[idx] = {
-                    date: remoteRec.date,
-                    timestamp: Math.max(historyRecords[idx].timestamp || 0, remoteRec.timestamp || 0),
-                    data: mergedData
-                  };
-                  if (beforeJSON !== afterJSON) appliedAnyChange = true;
+                } else if ((remoteRec.timestamp || 0) > (historyRecords[idx].timestamp || 0)) {
+                  historyRecords[idx] = remoteRec;
+                  appliedAnyChange = true;
                 }
               });
             }
@@ -2614,8 +2527,7 @@
           clientId: CLIENT_ID,
           version: lastVersion,
           data: data,
-          history: historyRecords,
-          deleted: deletedHistoryDates
+          history: historyRecords
         }), { qos: 1, retain: true });
       } catch(e) {}
     }
