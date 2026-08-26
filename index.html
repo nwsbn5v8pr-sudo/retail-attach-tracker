@@ -1839,7 +1839,6 @@
 
     document.getElementById("teamCount").textContent = `${visibleCount} Team Members`;
   }
-
   function promptAddTeamMember() {
     const name = prompt("Enter team member's full name:");
     if (!name || !name.trim()) return;
@@ -2085,4 +2084,416 @@
     const todayStr = getTodayString();
 
     if (!liveDay) {
-      try { localStorage.setItem(STORAGE_KE
+      try { localStorage.setItem(STORAGE_KEY_LIVE_DAY, todayStr); } catch(e) {}
+      return false;
+    }
+
+    if (liveDay === todayStr) {
+      return false;
+    }
+
+    const hasActiveData = data.some(d => d.checkedIn || (d.ac + d.upgrade + d.services + d.biz + d.acc) > 0);
+    if (hasActiveData) {
+      saveCurrentDay(true, liveDay);
+    }
+
+    data.forEach(d => {
+      d.checkedIn = false;
+      d.ac = 0;
+      d.upgrade = 0;
+      d.services = 0;
+      d.biz = 0;
+      d.acc = 0;
+      d.step = "";
+      d.notes = "";
+      d.updatedAt = Date.now();
+    });
+
+    try { localStorage.setItem(STORAGE_KEY_LIVE_DAY, todayStr); } catch(e) {}
+
+    lastVersion = Date.now();
+    saveLocalState();
+    broadcastChange();
+    flashAutoSaveBadge(`🌙 New Day Started — ${liveDay} Archived to History`);
+    return true;
+  }
+
+  function setupAutoEngines() {
+    let lastHourlySaveHour = -1;
+
+    function runEngines() {
+      const now = new Date();
+      const curHour = now.getHours();
+      const curMin = now.getMinutes();
+      const today = getTodayString();
+
+      const rolledOver = rolloverDayIfNeeded();
+      if (rolledOver) {
+        if (currentTab === 'daily') {
+          renderTableStructure();
+          updateTotals();
+          reorderRows();
+        } else if (currentTab === 'priorday' || currentTab === 'history' ||
+                   currentTab === 'weekly' || currentTab === 'monthly' || currentTab === 'quarterly') {
+          switchTab(currentTab);
+        }
+      }
+
+      if (curHour !== lastHourlySaveHour) {
+        lastHourlySaveHour = curHour;
+        saveLocalState();
+        checkPasscodeGate();
+        flashAutoSaveBadge(`💾 Auto-Saved Hourly Checkpoint (${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})`);
+      }
+
+      const isPast859PM = (curHour === 20 && curMin >= 59) || (curHour >= 21);
+      if (isPast859PM) {
+        const hasActiveData = data.some(d => d.checkedIn || (d.ac + d.upgrade + d.services + d.biz + d.acc) > 0);
+        if (hasActiveData) {
+          saveCurrentDay(true);
+        }
+      }
+
+      const isMidnightReset = (curHour === 23 && curMin >= 59);
+      if (isMidnightReset) {
+        const alreadyResetKey = 'pz_tracker_midnight_reset_' + today;
+        let alreadyReset = false;
+        try {
+          alreadyReset = localStorage.getItem(alreadyResetKey) === 'true';
+        } catch(e) {}
+
+        if (!alreadyReset) {
+          saveCurrentDay(true);
+
+          data.forEach(d => {
+            d.checkedIn = false;
+            d.ac = 0;
+            d.upgrade = 0;
+            d.services = 0;
+            d.biz = 0;
+            d.acc = 0;
+            d.step = "";
+            d.notes = "";
+            d.updatedAt = Date.now();
+          });
+
+          try {
+            localStorage.setItem(alreadyResetKey, 'true');
+            localStorage.setItem(STORAGE_KEY_LIVE_DAY, today);
+          } catch(e) {}
+
+          lastVersion = Date.now();
+          saveLocalState();
+          broadcastChange();
+          flashAutoSaveBadge(`🌙 Daily Shift Closed (Board Reset for Next Morning)`);
+
+          if (currentTab === 'daily') {
+            renderTableStructure();
+            updateTotals();
+            reorderRows();
+          } else if (currentTab === 'priorday' || currentTab === 'history') {
+            switchTab(currentTab);
+          }
+        }
+      }
+    }
+
+    setInterval(runEngines, 30000);
+    runEngines();
+  }
+
+  function renderHistoryList() {
+    const container = document.getElementById('historyListContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (historyRecords.length === 0) {
+      container.innerHTML = `
+        <div style="padding: 30px; text-align: center; color: var(--text-secondary);">
+          <h3>No Shift History Yet</h3>
+          <p style="margin-top: 6px; font-size: 13px;">Tap "Save Day" or let the 8:59 PM auto-save run to build your daily history logs.</p>
+        </div>
+      `;
+      return;
+    }
+
+    historyRecords.forEach((rec, idx) => {
+      let recAc = 0, recUp = 0, recSrv = 0, recBiz = 0, recAcc = 0, recSlam = 0, recChecked = 0;
+      rec.data.forEach(p => {
+        if (p.checkedIn) recChecked++;
+        recAc += (p.ac || 0);
+        recUp += (p.upgrade || 0);
+        recSrv += (p.services || 0);
+        recBiz += (p.biz || 0);
+        recAcc += (p.acc || 0);
+        if (getHitCount(p) === 5) recSlam++;
+      });
+
+      const item = document.createElement('div');
+      item.className = 'history-item';
+      item.innerHTML = `
+        <div class="history-info">
+          <div class="history-date">📅 ${rec.date}</div>
+          <div class="history-meta">👥 ${recChecked} Checked In • 🏆 ${recSlam} Grand Slams • 🍎 ${recAc} AC+ • 🆙 ${recUp} Upgrades • 🛍️ ${recSrv} Services • 💼 ${recBiz} Biz • 🎧 ${recAcc} Acc</div>
+        </div>
+        <div class="history-actions">
+          <button class="secondary" style="min-height: 32px; padding: 4px 10px; font-size: 12px;" onclick="exportHistoryCSV(${idx})">📥 Export Day CSV</button>
+          <button class="secondary" style="min-height: 32px; padding: 4px 10px; font-size: 12px;" onclick="restoreHistoryToLive(${idx})">🔄 Restore to Live</button>
+          <button class="danger" style="min-height: 32px; padding: 4px 8px; font-size: 12px;" onclick="deleteHistoryRecord(${idx})">🗑️</button>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  }
+
+  function restoreHistoryToLive(idx) {
+    const rec = historyRecords[idx];
+    if (!rec) return;
+    if (confirm(`Load shift from ${rec.date} into your Live Daily tracker? Current unsaved live counts will be overwritten.`)) {
+      data = JSON.parse(JSON.stringify(rec.data));
+      const restoreTs = Date.now();
+      data.forEach(d => { d.updatedAt = restoreTs; });
+      lastVersion = Date.now();
+      saveLocalState();
+      switchTab('daily');
+      broadcastChange();
+    }
+  }
+
+  function deleteHistoryRecord(idx) {
+    if (confirm(`Permanently remove record for ${historyRecords[idx].date}?`)) {
+      historyRecords.splice(idx, 1);
+      saveLocalState();
+      renderHistoryList();
+    }
+  }
+
+  function exportHistoryCSV(idx) {
+    const rec = historyRecords[idx];
+    if (!rec) return;
+    let csv = `Shift Archive - ${rec.date}\nChecked In,Name,Job Title,Grand Slam Status (🏆),AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧),Apple Steps of Services,Notes\n`;
+    rec.data.forEach(p => {
+      const hits = getHitCount(p);
+      const slamLabel = hits === 5 ? "GRAND SLAM (5/5) 🏆" : `${hits}/5`;
+      const inStatus = p.checkedIn ? "Yes" : "No";
+      csv += `"${inStatus}","${p.name}","${p.role}","${slamLabel}",${p.ac},${p.upgrade},${p.services},${p.biz},${p.acc},"${p.step || ''}","${p.notes || ''}"\n`;
+    });
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.setAttribute("href", url);
+    a.setAttribute("download", `PZ_Focus_And_Follow_Archive_${rec.date}.csv`);
+    a.click();
+  }
+
+  function resetCounts() {
+    if (confirm("Reset today's active metrics, steps, and check-ins to 0? (Archived history will remain saved)")) {
+      data.forEach(d => {
+        d.checkedIn = false;
+        d.ac = 0;
+        d.upgrade = 0;
+        d.services = 0;
+        d.biz = 0;
+        d.acc = 0;
+        d.step = "";
+        d.notes = "";
+        d.updatedAt = Date.now();
+        const noteInput = document.getElementById(`notes-${d.id}`);
+        if (noteInput) noteInput.value = "";
+        const stepSelect = document.getElementById(`step-${d.id}`);
+        if (stepSelect) stepSelect.value = "";
+        renderCheckInVisual(d.id);
+      });
+      lastVersion = Date.now();
+      saveLocalState();
+      updateTotals();
+      broadcastChange();
+      setTimeout(reorderRows, 60);
+    }
+  }
+
+  function exportCSV() {
+    let csv = `PZ Focus & Follow Export (${currentTab.toUpperCase()})\n`;
+    if (currentTab === 'daily' || currentTab === 'priorday') {
+      csv += "Checked In,Name,Job Title,Grand Slam Status (🏆),AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧),Apple Steps of Services,Notes\n";
+      const list = getDisplayList();
+      const exportData = [...list].sort((a, b) => (b.checkedIn ? 1 : 0) - (a.checkedIn ? 1 : 0));
+      exportData.forEach(p => {
+        const hits = getHitCount(p);
+        const slamLabel = hits === 5 ? "GRAND SLAM (5/5) 🏆" : `${hits}/5`;
+        const inStatus = p.checkedIn ? "Yes" : "No";
+        csv += `"${inStatus}","${p.name}","${p.role}","${slamLabel}",${p.ac},${p.upgrade},${p.services},${p.biz},${p.acc},"${p.step || ''}","${p.notes || ''}"\n`;
+      });
+    } else {
+      const list = getDisplayList();
+      csv += "Name,Job Title,Shifts Worked,Grand Slam Achieved,AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧)\n";
+      list.forEach(p => {
+        csv += `"${p.name}","${p.role}",${p.shiftsWorked},${p.slamsAchieved},${p.ac},${p.upgrade},${p.services},${p.biz},${p.acc}\n`;
+      });
+    }
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.setAttribute("href", url);
+    a.setAttribute("download", `PZ_Focus_And_Follow_${currentTab.toUpperCase()}_Report.csv`);
+    a.click();
+  }
+
+  /* 🌐 SUPABASE REAL-TIME CLOUD SYNC ENGINE */
+  async function initCloudSync() {
+    setSyncBadge('🔄 Connecting Cloud Sync...');
+
+    try {
+      const { data: rows, error } = await supabaseClient
+        .from('attach_data')
+        .select('*')
+        .eq('user_id', STORE_ID)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.error("Supabase load error:", error);
+        setSyncBadge('💾 Saved to iPad (offline)');
+      } else if (rows && rows.length > 0) {
+        supabaseRowId = rows[0].id;
+        mergeIncomingState(rows[0].data);
+        setSyncBadge('🟢 Live Multi-Device Sync Active');
+      } else {
+        const { data: inserted, error: insertErr } = await supabaseClient
+          .from('attach_data')
+          .insert({
+            user_id: STORE_ID,
+            data: { data: data, history: historyRecords, version: lastVersion }
+          })
+          .select()
+          .single();
+        if (!insertErr) supabaseRowId = inserted.id;
+        setSyncBadge('🟢 Live Multi-Device Sync Active');
+      }
+
+      supabaseClient
+        .channel('attach_data_changes')
+        .on('postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'attach_data', filter: `user_id=eq.${STORE_ID}` },
+          (payload) => {
+            mergeIncomingState(payload.new.data);
+            setSyncBadge('🟢 Live Multi-Device Sync Active');
+          }
+        )
+        .subscribe();
+    } catch(e) {
+      console.error("Cloud sync init error:", e);
+      setSyncBadge('💾 Saved to iPad (offline)');
+    }
+  }
+
+  function mergeIncomingState(remoteState) {
+    if (!remoteState) return;
+    const remoteData = remoteState.data || [];
+    const remoteHistory = remoteState.history || [];
+    const remoteVersion = remoteState.version || 0;
+    let appliedAnyChange = false;
+
+    remoteData.forEach(remote => {
+      const remoteTs = remote.updatedAt || 0;
+      let local = data.find(d => d.name === remote.name);
+
+      if (!local) {
+        local = Object.assign({}, remote);
+        local.id = data.length > 0 ? Math.max(...data.map(d => d.id)) + 1 : 0;
+        data.push(local);
+        if (!INITIAL_ROSTER.some(m => m.name === local.name)) {
+          INITIAL_ROSTER.push({ name: local.name, role: local.role });
+        }
+        appliedAnyChange = true;
+        return;
+      }
+
+      const localTs = local.updatedAt || 0;
+      if (remoteTs > localTs) {
+        local.checkedIn = remote.checkedIn;
+        local.ac = remote.ac;
+        local.upgrade = remote.upgrade;
+        local.services = remote.services;
+        local.biz = remote.biz;
+        local.acc = remote.acc;
+        local.step = remote.step || "";
+        local.notes = remote.notes;
+        local.updatedAt = remoteTs;
+        appliedAnyChange = true;
+      }
+    });
+
+    remoteHistory.forEach(remoteRec => {
+      const idx = historyRecords.findIndex(r => r.date === remoteRec.date);
+      if (idx === -1) {
+        historyRecords.push(remoteRec);
+        appliedAnyChange = true;
+      } else if ((remoteRec.timestamp || 0) > (historyRecords[idx].timestamp || 0)) {
+        historyRecords[idx] = remoteRec;
+        appliedAnyChange = true;
+      }
+    });
+
+    if (remoteVersion > lastVersion) lastVersion = remoteVersion;
+
+    if (appliedAnyChange) {
+      saveLocalState();
+      if (currentTab === 'daily') {
+        updateTotals();
+        reorderRows();
+      } else if (currentTab === 'history') {
+        renderHistoryList();
+      } else {
+        renderTableStructure();
+        updateTotals();
+        reorderRows();
+      }
+    }
+  }
+
+  async function broadcastChange() {
+    lastVersion = Date.now();
+    saveLocalState();
+
+    if (!supabaseRowId) return;
+
+    try {
+      const { error } = await supabaseClient
+        .from('attach_data')
+        .update({
+          data: { data: data, history: historyRecords, version: lastVersion },
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', supabaseRowId);
+
+      if (error) {
+        console.error("Sync push error:", error);
+        setSyncBadge('💾 Saved to iPad (offline)');
+      } else {
+        setSyncBadge('🟢 Live Multi-Device Sync Active');
+      }
+    } catch(e) {
+      console.error("Sync push error:", e);
+      setSyncBadge('💾 Saved to iPad (offline)');
+    }
+  }
+
+  function setSyncBadge(txt) {
+    const el = document.getElementById('syncStatus');
+    if (el) el.textContent = txt;
+  }
+
+  // Initialize
+  checkPasscodeGate();
+  setInterval(checkPasscodeGate, 15000);
+  renderTableStructure();
+  updateSortHeaderIcons();
+  updateTotals();
+  reorderRows();
+  initCloudSync();
+  setupAutoEngines();
+</script>
+</body>
+</html>
