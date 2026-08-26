@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>🛍️PZ Focus & Follow 🆙</title>
-<!-- Lightweight MQTT over WebSockets for Instant Serverless Cloud Sync -->
-<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<!-- Supabase Client for Real-Time Cloud Sync -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
     --bg-primary: #f2f2f7;
@@ -66,7 +66,6 @@
     min-height: 100vh;
   }
 
-  /* Top Action Bar */
   .top-bar {
     display: flex;
     justify-content: space-between;
@@ -143,7 +142,6 @@
     cursor: not-allowed;
   }
 
-  /* Segmented Navigation Tabs */
   .timeframe-nav {
     display: flex;
     justify-content: space-between;
@@ -203,7 +201,6 @@
     cursor: pointer;
   }
 
-  /* Top Performers Podium Section */
   .top-performers-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
@@ -277,7 +274,6 @@
     font-weight: 500;
   }
 
-  /* KPI Grid */
   .kpi-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -312,7 +308,6 @@
     font-weight: 700;
   }
 
-  /* Filters */
   .filter-panel {
     background: var(--bg-card);
     border: 1px solid var(--border);
@@ -347,7 +342,6 @@
     color: var(--text-secondary);
   }
 
-  /* Table Card */
   .table-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
@@ -368,7 +362,6 @@
     font-size: 13px;
   }
 
-  /* Sortable Headers */
   thead th {
     position: sticky;
     top: 0;
@@ -603,7 +596,6 @@
     z-index: 30;
   }
 
-  /* History Logs Card */
   .history-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
@@ -636,7 +628,6 @@
     display: flex;
     gap: 8px;
   }
-  /* Passcode Gate Overlay */
   .auth-overlay {
     position: fixed;
     top: 0;
@@ -736,7 +727,6 @@
 </head>
 <body>
 
-  <!-- Passcode Gate Screen -->
   <div class="auth-overlay" id="authGate">
     <div class="auth-card">
       <div class="auth-icon">🔒</div>
@@ -768,7 +758,6 @@
     </div>
   </div>
 
-  <!-- Top Action Bar -->
   <div class="top-bar">
     <div class="app-title">
       🛍️PZ Focus & Follow 🆙
@@ -786,7 +775,6 @@
     </div>
   </div>
 
-  <!-- Timeframe Navigation Tabs -->
   <div class="timeframe-nav">
     <div class="segmented-control">
       <button class="tab-btn active" id="tab-daily" onclick="switchTab('daily')">📅 Daily (Live)</button>
@@ -798,12 +786,10 @@
     </div>
     <div class="timeframe-controls">
       <select id="periodSelector" class="period-selector" style="display: none;" onchange="onPeriodChange()">
-        <!-- Populated dynamically based on selected tab -->
       </select>
     </div>
   </div>
 
-  <!-- Top Performers Podium Section -->
   <div class="top-performers-card" id="topPerformersSection">
     <div class="top-performers-header">
       <div class="top-performers-title">
@@ -815,7 +801,6 @@
     <div class="top-performers-grid" id="topPerformersGrid"></div>
   </div>
 
-  <!-- Summary Cards -->
   <div class="kpi-grid">
     <div class="kpi-card checkin">
       <span class="kpi-label" id="lbl-kpi-checkin">👥 Checked In</span>
@@ -847,7 +832,6 @@
     </div>
   </div>
 
-  <!-- Filters -->
   <div class="filter-panel" id="filterPanel">
     <div class="filter-inputs">
       <input type="search" id="searchInput" placeholder="🔍 Search name..." oninput="filterTable()">
@@ -885,7 +869,6 @@
     <div class="team-count-badge" id="teamCount">81 Team Members</div>
   </div>
 
-  <!-- Table Card -->
   <div class="table-card" id="mainTableCard">
     <div class="table-wrapper">
       <table>
@@ -936,7 +919,6 @@
     </div>
   </div>
 
-  <!-- History Logs View Card -->
   <div class="history-card" id="historyCard">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
       <h2 style="font-size: 18px; font-weight: 700;">📜 Daily Shift History Logs</h2>
@@ -950,10 +932,15 @@
   const STORAGE_KEY_HISTORY = "pz_tracker_history_records_v10";
   const STORAGE_KEY_AUTH = "pz_tracker_auth_unlocked_ts";
   const STORAGE_KEY_LIVE_DAY = "pz_tracker_live_day_v10";
-  const STORE_PASSCODE = "1984"; // 4-digit passcode for store access
-  const PIN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour expiry (in ms)
-  const SYNC_TOPIC = "apple_retail_attach_tracker_shared_store_room";
-  const CLIENT_ID = "client_" + Math.random().toString(36).substring(2, 10);
+  const STORE_PASSCODE = "1984";
+  const PIN_EXPIRY_MS = 60 * 60 * 1000;
+
+  // --- SUPABASE CLOUD SYNC CONFIG ---
+  const SUPABASE_URL = "https://bkmpqjoqcilicmfahemg.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_ss_a29uxD1FZWZ0at6uk_Q_a55sCjRg";
+  const STORE_ID = "pz_focus_follow_main";
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  let supabaseRowId = null;
 
   let enteredPin = "";
 
@@ -1032,10 +1019,9 @@
 
   const INITIAL_ROSTER = [{"name": "Felipe Flores", "role": "Business Expert"}, {"name": "Edward Owens", "role": "Business Pro"}, {"name": "Brad Teegarden", "role": "Creative"}, {"name": "Joey Rocks", "role": "Creative"}, {"name": "Nicholas Yousif", "role": "Creative"}, {"name": "Paul Zaldivar", "role": "Creative"}, {"name": "Dawn Oree", "role": "Creative Pro"}, {"name": "Joe Davis", "role": "Creative Pro"}, {"name": "Kassie Sicairos", "role": "Creative Pro"}, {"name": "Andrew Portillo", "role": "Expert"}, {"name": "Patty Wigdahl", "role": "Expert"}, {"name": "Tiago Nocera", "role": "Expert"}, {"name": "Tom Antorietto Jr", "role": "Expert"}, {"name": "Dee Mitchell", "role": "Pro"}, {"name": "Chris White", "role": "Pro"}, {"name": "Michelle Trester", "role": "POP"}, {"name": "Adriel Guerrero", "role": "Specialist"}, {"name": "Aladin Bader", "role": "Specialist"}, {"name": "Alejandra Gomez", "role": "Specialist"}, {"name": "Andre Salehian", "role": "Specialist"}, {"name": "Angelo Montano", "role": "Specialist"}, {"name": "Brooke Polendo", "role": "Specialist"}, {"name": "Cesar Lopez Belmudez", "role": "Specialist"}, {"name": "Chanel Ammo", "role": "Specialist"}, {"name": "Chris Olivares", "role": "Specialist"}, {"name": "Daniel Cuellar", "role": "Specialist"}, {"name": "Darla Co", "role": "Specialist"}, {"name": "Dennise Juarez Aguilar", "role": "Specialist"}, {"name": "Don Anders", "role": "Specialist"}, {"name": "Dylan Shaw", "role": "Specialist"}, {"name": "Farid Lopez", "role": "Specialist"}, {"name": "Felix Fazakerley", "role": "Specialist"}, {"name": "Francia Sanchez", "role": "Specialist"}, {"name": "Frank O'Connor", "role": "Specialist"}, {"name": "Halle Horning", "role": "Specialist"}, {"name": "Henry Avalos Martell", "role": "Specialist"}, {"name": "Jacob Olson", "role": "Specialist"}, {"name": "Jahkell Robins", "role": "Specialist"}, {"name": "Jake Opatz", "role": "Specialist"}, {"name": "Jamal Delaney", "role": "Specialist"}, {"name": "James O'Shea", "role": "Specialist"}, {"name": "Jay Jimenez", "role": "Specialist"}, {"name": "Josheiry Torres", "role": "Specialist"}, {"name": "Joshua Saradpon", "role": "Specialist"}, {"name": "Josh Wise", "role": "Specialist"}, {"name": "Josiah Bergstrom", "role": "Specialist"}, {"name": "Joyce Lam", "role": "Specialist"}, {"name": "Kaitlyn Villa", "role": "Specialist"}, {"name": "Kari DeVault", "role": "Specialist"}, {"name": "Ken Mata", "role": "Specialist"}, {"name": "Kevin Corona Lozada", "role": "Specialist"}, {"name": "Ke\u2019Ana Alonzo", "role": "Specialist"}, {"name": "Kristal", "role": "Specialist"}, {"name": "Lexi English", "role": "Specialist"}, {"name": "Liam McEwan", "role": "Specialist"}, {"name": "Loren Fish", "role": "Specialist"}, {"name": "Lucas Martinez", "role": "Specialist"}, {"name": "Luis Sosa", "role": "Specialist"}, {"name": "Luis Soto Jr", "role": "Specialist"}, {"name": "Melody Pauls", "role": "Specialist"}, {"name": "Michael Terrientes", "role": "Specialist"}, {"name": "Miranda Gonzalez", "role": "Specialist"}, {"name": "Natalie Gibson", "role": "Specialist"}, {"name": "Nick Avalos", "role": "Specialist"}, {"name": "Ofelia Carrillo", "role": "Specialist"}, {"name": "Peter Robinson", "role": "Specialist"}, {"name": "Ramon Beltran", "role": "Specialist"}, {"name": "Ray Johnson", "role": "Specialist"}, {"name": "Roanne Jans", "role": "Specialist"}, {"name": "Rob Koepp", "role": "Specialist"}, {"name": "Ron Ejanda", "role": "Specialist"}, {"name": "Sador Rusom", "role": "Specialist"}, {"name": "SKYLAR WARE", "role": "Specialist"}, {"name": "Thania Medina", "role": "Specialist"}, {"name": "Tommy Chambers", "role": "Specialist"}, {"name": "Trisha Nguyen", "role": "Specialist"}, {"name": "Valeria Jacobo", "role": "Specialist"}, {"name": "Zahra Rahmaan", "role": "Specialist"}, {"name": "Zion Maly", "role": "Specialist"}, {"name": "Delaine Downie", "role": "Tech and Merch Pro"}, {"name": "Sara Gharabaghli", "role": "Tech and Merch Pro"}];
 
-  let currentTab = 'daily'; // 'daily' | 'priorday' | 'weekly' | 'monthly' | 'quarterly' | 'history'
+  let currentTab = 'daily';
   let selectedPeriodKey = 'current';
 
-  // Live active shift data
   let data = INITIAL_ROSTER.map((item, idx) => ({
     id: idx,
     name: item.name,
@@ -1051,10 +1037,8 @@
     updatedAt: 0
   }));
 
-  // Historical archived daily shifts
   let historyRecords = [];
   let lastVersion = 0;
-  let mqttClient = null;
 
   function escapeHtml(str) {
     if (!str) return '';
@@ -1099,7 +1083,6 @@
     return date.toLocaleString('default', { month: 'long', year: 'numeric' });
   }
 
-  // 1. Restore local cache immediately
   try {
     const savedLive = localStorage.getItem(STORAGE_KEY_LIVE);
     if (savedLive) {
@@ -1109,9 +1092,6 @@
         parsed.data.forEach(savedItem => {
           let target = data.find(d => d.name === savedItem.name);
           if (!target) {
-            // Member was added dynamically (via Add Team Member) in a prior session
-            // and is missing from the static roster after reload — recreate them
-            // instead of silently dropping their saved metrics.
             const newId = data.length > 0 ? Math.max(...data.map(d => d.id)) + 1 : 0;
             target = {
               id: savedItem.id !== undefined && !data.some(d => d.id === savedItem.id) ? savedItem.id : newId,
@@ -1162,13 +1142,8 @@
     } catch(e) {}
   }
 
-  // Immediately persist state after restore/recreate logic above, so any
-  // dynamically-recreated team members (added via ➕ Add Team Member in a
-  // prior session) are written back to localStorage right away and don't
-  // rely on the next user action to be saved.
   saveLocalState();
 
-  // Undo History Stack (Max 25 actions)
   let undoStack = [];
 
   function pushUndoSnapshot() {
@@ -1256,10 +1231,6 @@
     }
 
     if (currentTab === 'priorday') {
-      // "Prior Day" = the most recent saved record strictly BEFORE today.
-      // Using historyRecords[0] directly was wrong because auto-saves
-      // (hourly / 8:59 PM) re-save TODAY into that same slot, so Prior Day
-      // could end up showing today's own live data instead of yesterday's.
       const todayStr = getTodayString();
       const priorRecord = historyRecords
         .filter(r => r.date !== todayStr)
@@ -1344,10 +1315,6 @@
     });
 
     if (selectedPeriodKey === 'current') {
-      // Only fold in today's LIVE in-memory data if today hasn't already
-      // been archived into historyRecords — otherwise today's numbers would
-      // be counted twice (once from `data`, once from its own history entry
-      // picked up by relevantRecords below).
       const todayStr = getTodayString();
       const todayAlreadyArchived = historyRecords.some(r => r.date === todayStr);
       if (!todayAlreadyArchived) {
@@ -1426,7 +1393,6 @@
     else if (currentTab === 'priorday') subtitle.textContent = '(Prior Shift Leaderboard)';
     else subtitle.textContent = `(${currentTab.toUpperCase()} Leaderboard)`;
 
-    // Score based on Grand Slam hits + total units
     const sortedPerformers = [...list].sort((a, b) => {
       const hitsA = (currentTab === 'daily' || currentTab === 'priorday') ? getHitCount(a) : (a.slamsAchieved || 0);
       const hitsB = (currentTab === 'daily' || currentTab === 'priorday') ? getHitCount(b) : (b.slamsAchieved || 0);
@@ -1874,14 +1840,12 @@
     document.getElementById("teamCount").textContent = `${visibleCount} Team Members`;
   }
 
-  /* ➕ ADD TEAM MEMBER LOGIC */
   function promptAddTeamMember() {
     const name = prompt("Enter team member's full name:");
     if (!name || !name.trim()) return;
 
     const trimmedName = name.trim();
 
-    // Prevent duplicate entries
     if (data.some(d => d.name.toLowerCase() === trimmedName.toLowerCase())) {
       alert(`⚠️ "${trimmedName}" is already on the roster.`);
       return;
@@ -1912,7 +1876,6 @@
     if (!isNaN(roleIdx) && roleIdx >= 0 && roleIdx < availableRoles.length) {
       selectedRole = availableRoles[roleIdx];
     } else if (roleChoice.trim()) {
-      // If user typed out the role name directly
       const match = availableRoles.find(r => r.toLowerCase() === roleChoice.trim().toLowerCase());
       selectedRole = match || roleChoice.trim();
     }
@@ -1924,7 +1887,7 @@
       id: newId,
       name: trimmedName,
       role: selectedRole,
-      checkedIn: true, // Automatically check in new addition
+      checkedIn: true,
       ac: 0,
       upgrade: 0,
       services: 0,
@@ -1950,7 +1913,6 @@
     flashAutoSaveBadge(`✅ Added ${trimmedName}`);
   }
 
-  /* 📑 TAB SWITCHING LOGIC */
   function switchTab(tab) {
     currentTab = tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -2074,7 +2036,6 @@
     reorderRows();
   }
 
-  /* 💾 SAVE & HISTORY LOGIC (Non-Destructive) */
   function saveCurrentDay(silent = false, targetDate = null) {
     const today = targetDate || getTodayString();
     const existingIdx = historyRecords.findIndex(r => r.date === today);
@@ -2115,17 +2076,6 @@
     }
   }
 
-  /* ⏰ HOURLY AUTO-SAVE, 8:59 PM AUTO-SNAPSHOT & 11:59 PM MIDNIGHT RESET ENGINE */
-
-  // 📅 Robust day-rollover: archives `data` to the date it actually belongs
-  // to and clears the board for a new day. This does NOT depend on the app
-  // being open at a precise minute (8:59 PM / 11:59 PM) — it simply compares
-  // "what day is the live board currently tracking?" vs. "what day is it
-  // right now?" every time this runs (on load, and every 30s tick). If the
-  // iPad was asleep, the tab was closed, or the passcode gate was up at
-  // midnight, the very next time the app is opened it catches up correctly:
-  // saves the stale day to Prior Day / History (which also feeds Weekly,
-  // Monthly, Quarterly), then resets the live board for today.
   function rolloverDayIfNeeded() {
     let liveDay;
     try {
@@ -2135,418 +2085,4 @@
     const todayStr = getTodayString();
 
     if (!liveDay) {
-      // First run ever on this device — just stamp today, nothing to roll over.
-      try { localStorage.setItem(STORAGE_KEY_LIVE_DAY, todayStr); } catch(e) {}
-      return false;
-    }
-
-    if (liveDay === todayStr) {
-      return false; // Still the same day, nothing to do.
-    }
-
-    // The live board belongs to a previous day — archive it under that date
-    // (not today's date), then reset the board for the new day.
-    const hasActiveData = data.some(d => d.checkedIn || (d.ac + d.upgrade + d.services + d.biz + d.acc) > 0);
-    if (hasActiveData) {
-      saveCurrentDay(true, liveDay); // Save under the day it belongs to
-    }
-
-    data.forEach(d => {
-      d.checkedIn = false;
-      d.ac = 0;
-      d.upgrade = 0;
-      d.services = 0;
-      d.biz = 0;
-      d.acc = 0;
-      d.step = "";
-      d.notes = "";
-      d.updatedAt = Date.now();
-    });
-
-    try { localStorage.setItem(STORAGE_KEY_LIVE_DAY, todayStr); } catch(e) {}
-
-    lastVersion = Date.now();
-    saveLocalState();
-    broadcastChange();
-    flashAutoSaveBadge(`🌙 New Day Started — ${liveDay} Archived to History`);
-    return true;
-  }
-
-  function setupAutoEngines() {
-    let lastHourlySaveHour = -1;
-
-    function runEngines() {
-      const now = new Date();
-      const curHour = now.getHours();
-      const curMin = now.getMinutes();
-      const today = getTodayString();
-
-      // 0. Date-based rollover catch-up — runs every tick regardless of the
-      // exact time, so a missed 8:59/11:59 window (device asleep, tab
-      // closed, gate locked) is corrected the moment the app is next active.
-      const rolledOver = rolloverDayIfNeeded();
-      if (rolledOver) {
-        if (currentTab === 'daily') {
-          renderTableStructure();
-          updateTotals();
-          reorderRows();
-        } else if (currentTab === 'priorday' || currentTab === 'history' ||
-                   currentTab === 'weekly' || currentTab === 'monthly' || currentTab === 'quarterly') {
-          switchTab(currentTab);
-        }
-      }
-
-      // 1. Hourly State Checkpoint + Passcode Gate Recheck
-      if (curHour !== lastHourlySaveHour) {
-        lastHourlySaveHour = curHour;
-        saveLocalState();
-        checkPasscodeGate();
-        flashAutoSaveBadge(`💾 Auto-Saved Hourly Checkpoint (${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})`);
-      }
-
-      // 2. 8:59 PM Auto-Snapshot to Prior Day (Non-Destructive: does NOT delete same-day live data)
-      const isPast859PM = (curHour === 20 && curMin >= 59) || (curHour >= 21);
-      if (isPast859PM) {
-        const hasActiveData = data.some(d => d.checkedIn || (d.ac + d.upgrade + d.services + d.biz + d.acc) > 0);
-        if (hasActiveData) {
-          saveCurrentDay(true); // Non-destructive save & roll to Prior Day, Weekly, Monthly, Quarterly
-        }
-      }
-
-      // 3. 11:59 PM Midnight EOD Reset (Clears live daily board for next morning)
-      const isMidnightReset = (curHour === 23 && curMin >= 59);
-      if (isMidnightReset) {
-        const alreadyResetKey = 'pz_tracker_midnight_reset_' + today;
-        let alreadyReset = false;
-        try {
-          alreadyReset = localStorage.getItem(alreadyResetKey) === 'true';
-        } catch(e) {}
-
-        if (!alreadyReset) {
-          // Ensure final snapshot saved before wiping
-          saveCurrentDay(true);
-
-          // Reset live daily board for next morning
-          data.forEach(d => {
-            d.checkedIn = false;
-            d.ac = 0;
-            d.upgrade = 0;
-            d.services = 0;
-            d.biz = 0;
-            d.acc = 0;
-            d.step = "";
-            d.notes = "";
-            d.updatedAt = Date.now();
-          });
-
-          try {
-            localStorage.setItem(alreadyResetKey, 'true');
-            localStorage.setItem(STORAGE_KEY_LIVE_DAY, today);
-          } catch(e) {}
-
-          lastVersion = Date.now();
-          saveLocalState();
-          broadcastChange();
-          flashAutoSaveBadge(`🌙 Daily Shift Closed (Board Reset for Next Morning)`);
-
-          if (currentTab === 'daily') {
-            renderTableStructure();
-            updateTotals();
-            reorderRows();
-          } else if (currentTab === 'priorday' || currentTab === 'history') {
-            switchTab(currentTab);
-          }
-        }
-      }
-    }
-
-    // Check every 30 seconds
-    setInterval(runEngines, 30000);
-    runEngines();
-  }
-
-  function renderHistoryList() {
-    const container = document.getElementById('historyListContainer');
-    if (!container) return;
-    container.innerHTML = '';
-
-    if (historyRecords.length === 0) {
-      container.innerHTML = `
-        <div style="padding: 30px; text-align: center; color: var(--text-secondary);">
-          <h3>No Shift History Yet</h3>
-          <p style="margin-top: 6px; font-size: 13px;">Tap "Save Day" or let the 8:59 PM auto-save run to build your daily history logs.</p>
-        </div>
-      `;
-      return;
-    }
-
-    historyRecords.forEach((rec, idx) => {
-      let recAc = 0, recUp = 0, recSrv = 0, recBiz = 0, recAcc = 0, recSlam = 0, recChecked = 0;
-      rec.data.forEach(p => {
-        if (p.checkedIn) recChecked++;
-        recAc += (p.ac || 0);
-        recUp += (p.upgrade || 0);
-        recSrv += (p.services || 0);
-        recBiz += (p.biz || 0);
-        recAcc += (p.acc || 0);
-        if (getHitCount(p) === 5) recSlam++;
-      });
-
-      const item = document.createElement('div');
-      item.className = 'history-item';
-      item.innerHTML = `
-        <div class="history-info">
-          <div class="history-date">📅 ${rec.date}</div>
-          <div class="history-meta">👥 ${recChecked} Checked In • 🏆 ${recSlam} Grand Slams • 🍎 ${recAc} AC+ • 🆙 ${recUp} Upgrades • 🛍️ ${recSrv} Services • 💼 ${recBiz} Biz • 🎧 ${recAcc} Acc</div>
-        </div>
-        <div class="history-actions">
-          <button class="secondary" style="min-height: 32px; padding: 4px 10px; font-size: 12px;" onclick="exportHistoryCSV(${idx})">📥 Export Day CSV</button>
-          <button class="secondary" style="min-height: 32px; padding: 4px 10px; font-size: 12px;" onclick="restoreHistoryToLive(${idx})">🔄 Restore to Live</button>
-          <button class="danger" style="min-height: 32px; padding: 4px 8px; font-size: 12px;" onclick="deleteHistoryRecord(${idx})">🗑️</button>
-        </div>
-      `;
-      container.appendChild(item);
-    });
-  }
-
-  function restoreHistoryToLive(idx) {
-    const rec = historyRecords[idx];
-    if (!rec) return;
-    if (confirm(`Load shift from ${rec.date} into your Live Daily tracker? Current unsaved live counts will be overwritten.`)) {
-      data = JSON.parse(JSON.stringify(rec.data));
-      const restoreTs = Date.now();
-      data.forEach(d => { d.updatedAt = restoreTs; });
-      lastVersion = Date.now();
-      saveLocalState();
-      switchTab('daily');
-      broadcastChange();
-    }
-  }
-
-  function deleteHistoryRecord(idx) {
-    if (confirm(`Permanently remove record for ${historyRecords[idx].date}?`)) {
-      historyRecords.splice(idx, 1);
-      saveLocalState();
-      renderHistoryList();
-    }
-  }
-
-  function exportHistoryCSV(idx) {
-    const rec = historyRecords[idx];
-    if (!rec) return;
-    let csv = `Shift Archive - ${rec.date}\nChecked In,Name,Job Title,Grand Slam Status (🏆),AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧),Apple Steps of Services,Notes\n`;
-    rec.data.forEach(p => {
-      const hits = getHitCount(p);
-      const slamLabel = hits === 5 ? "GRAND SLAM (5/5) 🏆" : `${hits}/5`;
-      const inStatus = p.checkedIn ? "Yes" : "No";
-      csv += `"${inStatus}","${p.name}","${p.role}","${slamLabel}",${p.ac},${p.upgrade},${p.services},${p.biz},${p.acc},"${p.step || ''}","${p.notes || ''}"\n`;
-    });
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.setAttribute("href", url);
-    a.setAttribute("download", `PZ_Focus_And_Follow_Archive_${rec.date}.csv`);
-    a.click();
-  }
-
-  function resetCounts() {
-    if (confirm("Reset today's active metrics, steps, and check-ins to 0? (Archived history will remain saved)")) {
-      data.forEach(d => {
-        d.checkedIn = false;
-        d.ac = 0;
-        d.upgrade = 0;
-        d.services = 0;
-        d.biz = 0;
-        d.acc = 0;
-        d.step = "";
-        d.notes = "";
-        d.updatedAt = Date.now();
-        const noteInput = document.getElementById(`notes-${d.id}`);
-        if (noteInput) noteInput.value = "";
-        const stepSelect = document.getElementById(`step-${d.id}`);
-        if (stepSelect) stepSelect.value = "";
-        renderCheckInVisual(d.id);
-      });
-      lastVersion = Date.now();
-      saveLocalState();
-      updateTotals();
-      broadcastChange();
-      setTimeout(reorderRows, 60);
-    }
-  }
-
-  function exportCSV() {
-    let csv = `PZ Focus & Follow Export (${currentTab.toUpperCase()})\n`;
-    if (currentTab === 'daily' || currentTab === 'priorday') {
-      csv += "Checked In,Name,Job Title,Grand Slam Status (🏆),AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧),Apple Steps of Services,Notes\n";
-      const list = getDisplayList();
-      const exportData = [...list].sort((a, b) => (b.checkedIn ? 1 : 0) - (a.checkedIn ? 1 : 0));
-      exportData.forEach(p => {
-        const hits = getHitCount(p);
-        const slamLabel = hits === 5 ? "GRAND SLAM (5/5) 🏆" : `${hits}/5`;
-        const inStatus = p.checkedIn ? "Yes" : "No";
-        csv += `"${inStatus}","${p.name}","${p.role}","${slamLabel}",${p.ac},${p.upgrade},${p.services},${p.biz},${p.acc},"${p.step || ''}","${p.notes || ''}"\n`;
-      });
-    } else {
-      const list = getDisplayList();
-      csv += "Name,Job Title,Shifts Worked,Grand Slam Achieved,AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧)\n";
-      list.forEach(p => {
-        csv += `"${p.name}","${p.role}",${p.shiftsWorked},${p.slamsAchieved},${p.ac},${p.upgrade},${p.services},${p.biz},${p.acc}\n`;
-      });
-    }
-
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.setAttribute("href", url);
-    a.setAttribute("download", `PZ_Focus_And_Follow_${currentTab.toUpperCase()}_Report.csv`);
-    a.click();
-  }
-
-  /* 🌐 ZERO-CONFIG REAL-TIME CLOUD SYNC ENGINE */
-  function initCloudSync() {
-    try {
-      const brokerUrl = "wss://broker.emqx.io:8084/mqtt";
-      mqttClient = mqtt.connect(brokerUrl, {
-        clientId: CLIENT_ID,
-        clean: true,
-        connectTimeout: 4000,
-        reconnectPeriod: 3000
-      });
-
-      mqttClient.on('connect', () => {
-        setSyncBadge('🟢 Live Multi-Device Sync Active');
-        mqttClient.subscribe(SYNC_TOPIC, { qos: 1 });
-        mqttClient.publish(SYNC_TOPIC + "/req", JSON.stringify({ clientId: CLIENT_ID, version: lastVersion }));
-      });
-
-      mqttClient.on('message', (topic, payload) => {
-        try {
-          const msg = JSON.parse(payload.toString());
-          if (topic.endsWith('/req') && msg.clientId !== CLIENT_ID) {
-            if (lastVersion > 0) {
-              mqttClient.publish(SYNC_TOPIC, JSON.stringify({
-                clientId: CLIENT_ID,
-                version: lastVersion,
-                data: data,
-                history: historyRecords
-              }), { qos: 1, retain: true });
-            }
-            return;
-          }
-
-          if (msg.clientId !== CLIENT_ID && msg.data) {
-            // Per-record merge: only overwrite a team member's fields if the
-            // incoming record is newer than what we have locally for THAT
-            // person. This prevents one device's change from wiping out an
-            // unrelated (or even the same) team member's more recent edit
-            // made on another device — no more "last full snapshot wins".
-            let appliedAnyChange = false;
-            msg.data.forEach(remote => {
-              const remoteTs = remote.updatedAt || 0;
-              let local = data.find(d => d.name === remote.name);
-
-              if (!local) {
-                // Team member exists remotely but not locally yet (e.g. added
-                // via Add Team Member on another device) — adopt them.
-                local = Object.assign({}, remote);
-                local.id = data.length > 0 ? Math.max(...data.map(d => d.id)) + 1 : 0;
-                data.push(local);
-                if (!INITIAL_ROSTER.some(m => m.name === local.name)) {
-                  INITIAL_ROSTER.push({ name: local.name, role: local.role });
-                }
-                appliedAnyChange = true;
-                return;
-              }
-
-              const localTs = local.updatedAt || 0;
-              if (remoteTs > localTs) {
-                local.checkedIn = remote.checkedIn;
-                local.ac = remote.ac;
-                local.upgrade = remote.upgrade;
-                local.services = remote.services;
-                local.biz = remote.biz;
-                local.acc = remote.acc;
-                local.step = remote.step || "";
-                local.notes = remote.notes;
-                local.updatedAt = remoteTs;
-                appliedAnyChange = true;
-              }
-            });
-
-            if (Array.isArray(msg.history)) {
-              // Merge history by date instead of blind overwrite, keeping
-              // whichever record per date is newest.
-              msg.history.forEach(remoteRec => {
-                const idx = historyRecords.findIndex(r => r.date === remoteRec.date);
-                if (idx === -1) {
-                  historyRecords.push(remoteRec);
-                  appliedAnyChange = true;
-                } else if ((remoteRec.timestamp || 0) > (historyRecords[idx].timestamp || 0)) {
-                  historyRecords[idx] = remoteRec;
-                  appliedAnyChange = true;
-                }
-              });
-            }
-
-            if (msg.version && msg.version > lastVersion) {
-              lastVersion = msg.version;
-            }
-
-            if (appliedAnyChange) {
-              saveLocalState();
-              if (currentTab === 'daily') {
-                updateTotals();
-                reorderRows();
-              } else if (currentTab === 'history') {
-                renderHistoryList();
-              } else {
-                renderTableStructure();
-                updateTotals();
-                reorderRows();
-              }
-            }
-            setSyncBadge('🟢 Live Multi-Device Sync Active');
-          }
-        } catch(err) {}
-      });
-
-      mqttClient.on('error', () => setSyncBadge('💾 Saved to iPad'));
-      mqttClient.on('offline', () => setSyncBadge('💾 Saved to iPad'));
-    } catch(e) {
-      setSyncBadge('💾 Saved to iPad');
-    }
-  }
-
-  function broadcastChange() {
-    lastVersion = Date.now();
-    saveLocalState();
-    if (mqttClient && mqttClient.connected) {
-      try {
-        mqttClient.publish(SYNC_TOPIC, JSON.stringify({
-          clientId: CLIENT_ID,
-          version: lastVersion,
-          data: data,
-          history: historyRecords
-        }), { qos: 1, retain: true });
-      } catch(e) {}
-    }
-  }
-
-  function setSyncBadge(txt) {
-    const el = document.getElementById('syncStatus');
-    if (el) el.textContent = txt;
-  }
-
-  // Initialize
-  checkPasscodeGate();
-  setInterval(checkPasscodeGate, 15000); // Poll passcode gate every 15s to enforce 1-hour expiry on active iPad
-  renderTableStructure();
-  updateSortHeaderIcons();
-  updateTotals();
-  reorderRows();
-  initCloudSync();
-  setupAutoEngines();
-</script>
-</body>
-</html>
+      try { localStorage.setItem(STORAGE_KE
