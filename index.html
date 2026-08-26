@@ -952,7 +952,78 @@
   const STORE_PASSCODE = "1984"; // 4-digit passcode for store access
   const PIN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour expiry (in ms)
   const SYNC_TOPIC = "apple_retail_attach_tracker_shared_store_room";
-  const CLIENT_ID = "client_" + Math.random().toString(36).substring(2, 10);
+  // Stable per-DEVICE id (persists across reloads) so a refresh is not treated
+  // as a brand-new peer. A random-per-load id made every reload look like a
+  // fresh device publishing a blank roster.
+  const CLIENT_ID = (function() {
+    const KEY = "pz_tracker_client_id";
+    try {
+      let id = localStorage.getItem(KEY);
+      if (!id) {
+        id = "client_" + Math.random().toString(36).substring(2, 10);
+        localStorage.setItem(KEY, id);
+      }
+      return id;
+    } catch (e) {
+      return "client_" + Math.random().toString(36).substring(2, 10);
+    }
+  })();
+
+  // Monotonic clock guard. Device clocks drift; if one iPad is ahead, its
+  // writes always "win" and can stamp zeroes over real data. We never emit a
+  // timestamp lower than the highest one we have ever seen from any peer.
+  let clockSkewOffset = 0;
+  function syncNow() {
+    return Date.now() + clockSkewOffset;
+  }
+  function observePeerTimestamp(ts) {
+    if (typeof ts === "number" && isFinite(ts)) {
+      const drift = ts - Date.now();
+      if (drift > clockSkewOffset) clockSkewOffset = drift;
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // LAMPORT LOGICAL CLOCK — conflict resolution that is immune to device
+  // clock skew. Wall-clock timestamps cannot arbitrate edits: if one iPad's
+  // clock runs ahead, its writes always "win" and can stamp zeroes over real
+  // work. Worse, a user legitimately decrementing a counter to 0 is
+  // indistinguishable from a skew-induced wipe if you only compare times.
+  //
+  // Instead every member row carries `rev`, a monotonically increasing
+  // integer. Any edit sets rev = (highest rev this device has ever seen) + 1,
+  // so causality is preserved regardless of what any clock says. Ties (same
+  // rev from two devices) break deterministically on clientId.
+  let lamportClock = 0;
+  function observeRev(rev) {
+    if (typeof rev === "number" && isFinite(rev) && rev > lamportClock) {
+      lamportClock = rev;
+    }
+  }
+  function nextRev() {
+    lamportClock += 1;
+    return lamportClock;
+  }
+  // Stamp a member as locally edited: bump logical rev + record wall time
+  // (wall time is retained for DISPLAY/history only, never for merging).
+  function stampEdit(member) {
+    member.rev = nextRev();
+    member.revBy = CLIENT_ID;
+    member.updatedAt = syncNow();
+    markPending(member.name);
+  }
+
+  // True once this device has real data (restored from storage or received
+  // from a peer). Until then it must never answer /req or broadcast, because
+  // its roster is all zeroes and would erase everyone else's work.
+  let stateHydrated = false;
+
+  // Does the live board contain any actual activity?
+  function hasAnyActivity(list) {
+    return (list || []).some(function(d) {
+      return d.checkedIn || ((d.ac||0) + (d.upgrade||0) + (d.services||0) + (d.biz||0) + (d.acc||0)) > 0;
+    });
+  }
 
   let enteredPin = "";
 
@@ -1047,7 +1118,9 @@
     acc: 0,
     step: "",
     notes: "",
-    updatedAt: 0
+    updatedAt: 0,
+    rev: 0,
+    revBy: ""
   }));
 
   // Historical archived daily shifts
@@ -1057,6 +1130,150 @@
   // Tracks edits made while disconnected so they can be flushed on reconnect
   // instead of being silently dropped.
   let pendingBroadcast = false;
+
+  // ------------------------------------------------------------------
+  // DEFENSIVE SYNC LOGGING
+  // Small, consistent, greppable. Filter the console with "[SYNC]" to
+  // reconstruct exactly what happened if data goes missing again.
+  const SYNC_DEBUG = true;
+  function syncLog(event, detail) {
+    if (!SYNC_DEBUG) return;
+    try {
+      const t = new Date().toISOString().substr(11, 12);
+      if (detail === undefined) console.log("[SYNC " + t + "] " + event);
+      else console.log("[SYNC " + t + "] " + event, detail);
+    } catch (e) {}
+  }
+  function syncWarn(event, detail) {
+    try {
+      const t = new Date().toISOString().substr(11, 12);
+      if (detail === undefined) console.warn("[SYNC " + t + "] " + event);
+      else console.warn("[SYNC " + t + "] " + event, detail);
+    } catch (e) {}
+  }
+  // Exposed so you can inspect live state from Safari's console on the iPad:
+  //   window.pzDiag()
+  window.pzDiag = function() {
+    const activeCount = (data || []).filter(function(d) {
+      return d.checkedIn || ((d.ac||0)+(d.upgrade||0)+(d.services||0)+(d.biz||0)+(d.acc||0)) > 0;
+    }).length;
+    const info = {
+      clientId: CLIENT_ID,
+      connected: !!(mqttClient && mqttClient.connected),
+      stateHydrated: stateHydrated,
+      lamportClock: lamportClock,
+      lastVersion: lastVersion,
+      rosterSize: (data || []).length,
+      membersWithActivity: activeCount,
+      pendingChanges: Array.from(pendingMembers),
+      historyDays: (historyRecords || []).length,
+      liveDayStamp: (function() { try { return localStorage.getItem(STORAGE_KEY_LIVE_DAY); } catch (e) { return "?"; } })(),
+      today: getTodayString(),
+      storageHealthy: storageHealthy
+    };
+    console.log("[SYNC DIAG]", info);
+    return info;
+  };
+
+  // ------------------------------------------------------------------
+  // OFFLINE PENDING CHANGES
+  // Names of members edited on THIS device that are not yet confirmed on the
+  // wire. Persisted so a refresh/crash while offline does not lose the work.
+  const STORAGE_KEY_PENDING = "pz_tracker_pending_v1";
+  let pendingMembers = new Set();
+
+  function loadPendingMembers() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_PENDING);
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) pendingMembers = new Set(arr);
+      }
+    } catch (e) {}
+  }
+  function savePendingMembers() {
+    try {
+      localStorage.setItem(STORAGE_KEY_PENDING, JSON.stringify(Array.from(pendingMembers)));
+    } catch (e) {}
+  }
+  function markPending(name) {
+    if (!name) return;
+    pendingMembers.add(name);
+    savePendingMembers();
+  }
+  function clearPending() {
+    pendingMembers.clear();
+    savePendingMembers();
+  }
+  function hasPending() {
+    return pendingMembers.size > 0;
+  }
+
+  // ------------------------------------------------------------------
+  // LOOP PREVENTION
+  //   1. Merging a peer's update NEVER auto-publishes (see message handler).
+  //   2. We refuse to publish a payload identical to the previous one.
+  //   3. We ignore inbound payloads we have already processed.
+  // Hard caps. Without these a looping/corrupt peer could grow `data` or
+  // `historyRecords` without bound, eventually blowing the localStorage quota
+  // (which is itself a data-loss event).
+  const MAX_ROSTER_SIZE = 500;
+  const MAX_HISTORY_DAYS = 400;
+
+  const RECONCILE_WAIT_MS = 1200;   // grace period for peers to answer /req
+  let reconcileTimer = null;
+  let lastOutboundFingerprint = "";
+  const seenInbound = [];
+  const SEEN_INBOUND_MAX = 40;
+
+  // ------------------------------------------------------------------
+  // DUPLICATE DELIVERY (MQTT QoS 1 = "at least once")
+  // The broker may redeliver the same publish more than once. Every outbound
+  // message carries a unique msgId; we remember the ids we have already
+  // processed and drop repeats outright. This is separate from the content
+  // fingerprint: two DIFFERENT messages can legitimately share content
+  // (idempotent), but the same msgId arriving twice is always a duplicate.
+  let msgCounter = 0;
+  function nextMsgId() {
+    msgCounter += 1;
+    return CLIENT_ID + ":" + msgCounter + ":" + Date.now().toString(36);
+  }
+  const seenMsgIds = [];
+  const SEEN_MSGIDS_MAX = 200;
+  function isDuplicateMsgId(id) {
+    if (!id) return false;
+    if (seenMsgIds.indexOf(id) !== -1) return true;
+    seenMsgIds.push(id);
+    if (seenMsgIds.length > SEEN_MSGIDS_MAX) seenMsgIds.shift();
+    return false;
+  }
+
+  function fingerprint(obj) {
+    // Hash only state-bearing fields; excludes version/wall-clock so an
+    // unchanged snapshot always hashes identically.
+    try {
+      const rows = (obj.data || []).map(function(d) {
+        return [d.name, d.rev || 0, d.revBy || "", d.checkedIn ? 1 : 0,
+                d.ac||0, d.upgrade||0, d.services||0, d.biz||0, d.acc||0,
+                d.step||"", d.notes||""].join("|");
+      }).join(";");
+      const hist = (obj.history || []).map(function(h) {
+        return h.date + ":" + (h.timestamp || 0);
+      }).join(",");
+      const s = rows + "#" + hist + "#" + (obj.dayReset ? "R" : "");
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+      return String(h) + ":" + s.length;
+    } catch (e) { return ""; }
+  }
+  function rememberInbound(fp) {
+    if (!fp) return;
+    seenInbound.push(fp);
+    if (seenInbound.length > SEEN_INBOUND_MAX) seenInbound.shift();
+  }
+  function isEchoOfSeenInbound(fp) {
+    return !!fp && seenInbound.indexOf(fp) !== -1;
+  }
 
   function escapeHtml(str) {
     if (!str) return '';
@@ -1101,9 +1318,25 @@
     return date.toLocaleString('default', { month: 'long', year: 'numeric' });
   }
 
-  // 1. Restore local cache immediately
+  // 1. Restore local cache immediately.
+  // Read the primary key; if it is missing or unparseable, fall back to the
+  // last-known-good backup rather than starting from an empty board (an empty
+  // board is what previously got broadcast and erased everyone else's data).
+  function readCachedState() {
+    const candidates = [STORAGE_KEY_LIVE, STORAGE_KEY_LIVE + "_bak"];
+    for (let i = 0; i < candidates.length; i++) {
+      try {
+        const raw = localStorage.getItem(candidates[i]);
+        if (!raw) continue;
+        const obj = JSON.parse(raw);
+        if (obj && Array.isArray(obj.data) && obj.data.length > 0) return raw;
+      } catch (e) {}
+    }
+    return null;
+  }
+
   try {
-    const savedLive = localStorage.getItem(STORAGE_KEY_LIVE);
+    const savedLive = readCachedState();
     if (savedLive) {
       const parsed = JSON.parse(savedLive);
       if (Array.isArray(parsed.data) && parsed.data.length > 0) {
@@ -1126,7 +1359,9 @@
               biz: 0,
               acc: 0,
               step: "",
-              notes: ""
+              notes: "",
+              rev: 0,
+              revBy: ""
             };
             data.push(target);
             if (!INITIAL_ROSTER.some(m => m.name === target.name)) {
@@ -1142,26 +1377,112 @@
           target.step = savedItem.step || "";
           target.notes = savedItem.notes || "";
           target.updatedAt = savedItem.updatedAt || 0;
+          target.rev = savedItem.rev || 0;
+          target.revBy = savedItem.revBy || "";
+          observeRev(target.rev);
+          if (target.updatedAt > 0 || target.rev > 0) stateHydrated = true;
+          observePeerTimestamp(target.updatedAt);
         });
       }
     }
   } catch(e) {}
 
   try {
-    const savedHist = localStorage.getItem(STORAGE_KEY_HISTORY);
-    if (savedHist) {
-      const parsed = JSON.parse(savedHist);
-      if (Array.isArray(parsed)) {
-        historyRecords = parsed;
-      }
+    let loadedHistory = null;
+    const histKeys = [STORAGE_KEY_HISTORY, STORAGE_KEY_HISTORY + "_bak"];
+    for (let i = 0; i < histKeys.length && loadedHistory === null; i++) {
+      try {
+        const raw = localStorage.getItem(histKeys[i]);
+        if (!raw) continue;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) loadedHistory = parsed;
+      } catch (e) {}
     }
+    if (loadedHistory !== null) historyRecords = loadedHistory;
   } catch(e) {}
 
-  function saveLocalState() {
+  loadPendingMembers();
+
+  // ------------------------------------------------------------------
+  // LOCALSTORAGE SAFETY
+  // localStorage is the offline cache / safety copy and is the ONLY thing
+  // standing between a user and lost work when the network is down. Rules:
+  //   * MQTT state is irrelevant here — saving never depends on the socket.
+  //   * Serialize FIRST, write second. A JSON error must not leave one key
+  //     updated and the other stale (that mismatch is what produced
+  //     "history says one thing, live board says another").
+  //   * Keep a last-known-good backup of each key so a quota-exceeded or
+  //     corrupted write can be rolled back instead of destroying the cache.
+  //   * Never throw out of here; a storage problem must not break the UI.
+  const STORAGE_KEY_LIVE_BAK = STORAGE_KEY_LIVE + "_bak";
+  const STORAGE_KEY_HISTORY_BAK = STORAGE_KEY_HISTORY + "_bak";
+  let storageHealthy = true;
+
+  function writeKeyWithBackup(key, bakKey, serialized) {
+    let previous = null;
     try {
-      localStorage.setItem(STORAGE_KEY_LIVE, JSON.stringify({ data: data, version: lastVersion }));
-      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(historyRecords));
-    } catch(e) {}
+      previous = localStorage.getItem(key);
+    } catch (e) {}
+
+    try {
+      localStorage.setItem(key, serialized);
+      // Verify the write actually landed (Safari private mode / full disk can
+      // silently no-op or truncate).
+      const check = localStorage.getItem(key);
+      if (check !== serialized) throw new Error("verify-failed");
+      // Success: promote the previous good value to backup.
+      if (previous !== null) {
+        try { localStorage.setItem(bakKey, previous); } catch (e) {}
+      }
+      return true;
+    } catch (e) {
+      // Roll back so we never leave a partial/corrupt value in place.
+      try {
+        if (previous !== null) localStorage.setItem(key, previous);
+        else localStorage.removeItem(key);
+      } catch (e2) {}
+      return false;
+    }
+  }
+
+  function saveLocalState() {
+    // 1. Serialize everything up front. If this throws, nothing is written.
+    let liveJson, histJson;
+    try {
+      liveJson = JSON.stringify({ data: data, version: lastVersion });
+      histJson = JSON.stringify(historyRecords);
+    } catch (e) {
+      storageHealthy = false;
+      setSyncBadge('⚠️ Could not save locally — do not close this tab');
+      return false;
+    }
+
+    // 2. Write each key atomically-with-rollback.
+    const okLive = writeKeyWithBackup(STORAGE_KEY_LIVE, STORAGE_KEY_LIVE_BAK, liveJson);
+    const okHist = writeKeyWithBackup(STORAGE_KEY_HISTORY, STORAGE_KEY_HISTORY_BAK, histJson);
+
+    if (!okLive || !okHist) {
+      storageHealthy = false;
+      // Storage is full or blocked. Trim the oldest history to reclaim room —
+      // archived days are the large, least-critical payload. Today's live board
+      // is never sacrificed.
+      if (!okHist && historyRecords.length > 30) {
+        try {
+          historyRecords = historyRecords
+            .slice()
+            .sort(function(a, b) { return parseDateSafe(b.date) - parseDateSafe(a.date); })
+            .slice(0, 30);
+          writeKeyWithBackup(STORAGE_KEY_HISTORY, STORAGE_KEY_HISTORY_BAK, JSON.stringify(historyRecords));
+        } catch (e) {}
+      }
+      setSyncBadge('⚠️ Local save failed (storage full?) — export CSV to be safe');
+      return false;
+    }
+
+    if (!storageHealthy) {
+      storageHealthy = true;   // recovered
+    }
+    return true;
   }
 
   // Immediately persist state after restore/recreate logic above, so any
@@ -1186,7 +1507,7 @@
     
     data = previousState;
     const undoTs = Date.now();
-    data.forEach(d => { d.updatedAt = undoTs; });
+    data.forEach(d => { d.updatedAt = undoTs; d.rev = nextRev(); d.revBy = CLIENT_ID; });
     lastVersion = undoTs;
     saveLocalState();
     broadcastChange();
@@ -1610,7 +1931,7 @@
     if (!member) return;
     pushUndoSnapshot();
     member.checkedIn = !member.checkedIn;
-    member.updatedAt = Date.now();
+    stampEdit(member);
     renderCheckInVisual(index);
     updateTotals();
     broadcastChange();
@@ -1637,7 +1958,7 @@
     pushUndoSnapshot();
     data.forEach(d => {
       d.checkedIn = status;
-      d.updatedAt = Date.now();
+      stampEdit(d);
       renderCheckInVisual(d.id);
     });
     updateTotals();
@@ -1703,7 +2024,7 @@
 
     pushUndoSnapshot();
     member[metric] = Math.max(0, member[metric] + delta);
-    member.updatedAt = Date.now();
+    stampEdit(member);
     if (member[metric] > 0 && !member.checkedIn) {
       member.checkedIn = true;
       renderCheckInVisual(index);
@@ -1725,7 +2046,7 @@
     if (!member) return;
     pushUndoSnapshot();
     member.step = val;
-    member.updatedAt = Date.now();
+    stampEdit(member);
     broadcastChange();
     if (currentSort.column === 'step') {
       setTimeout(reorderRows, 60);
@@ -1737,7 +2058,7 @@
     const member = data.find(d => d.id === index);
     if (!member) return;
     member.notes = val;
-    member.updatedAt = Date.now();
+    stampEdit(member);
     broadcastChange();
   }
 
@@ -1934,7 +2255,9 @@
       acc: 0,
       step: "",
       notes: "",
-      updatedAt: Date.now()
+      updatedAt: syncNow(),
+      rev: nextRev(),
+      revBy: CLIENT_ID
     };
 
     data.push(newMember);
@@ -2140,7 +2463,16 @@
     }
 
     if (liveDay === todayStr) {
-      return false; // Still the same day, nothing to do.
+      return false; // Still the same day, nothing to do. (No log: runs every 30s.)
+    }
+
+    syncLog("ROLLOVER TRIGGERED BY DATE CHANGE", { from: liveDay, to: todayStr });
+
+    // Do not roll over until this device has caught up. A fresh/reloaded iPad
+    // must not zero the board and broadcast that wipe to the room.
+    if (!stateHydrated && !hasAnyActivity(data)) {
+      try { localStorage.setItem(STORAGE_KEY_LIVE_DAY, todayStr); } catch(e) {}
+      return false;
     }
 
     // The live board belongs to a previous day — archive it under that date
@@ -2150,6 +2482,7 @@
       saveCurrentDay(true, liveDay); // Save under the day it belongs to
     }
 
+    const rolloverTs = syncNow();
     data.forEach(d => {
       d.checkedIn = false;
       d.ac = 0;
@@ -2159,14 +2492,19 @@
       d.acc = 0;
       d.step = "";
       d.notes = "";
-      d.updatedAt = Date.now();
+      d.updatedAt = rolloverTs;
+      d.rev = nextRev();
+      d.revBy = CLIENT_ID;
     });
 
     try { localStorage.setItem(STORAGE_KEY_LIVE_DAY, todayStr); } catch(e) {}
 
-    lastVersion = Date.now();
+    lastVersion = rolloverTs;
+    syncLog("ROLLOVER archived + board cleared", { archivedDate: liveDay, newDay: todayStr });
     saveLocalState();
-    broadcastChange();
+    // Announce the new day explicitly so peers treat this as an intentional
+    // day-boundary reset rather than an accidental blank wipe.
+    broadcastDayReset(rolloverTs, liveDay);
     flashAutoSaveBadge(`🌙 New Day Started — ${liveDay} Archived to History`);
     return true;
   }
@@ -2255,7 +2593,7 @@
     if (confirm(`Load shift from ${rec.date} into your Live Daily tracker? Current unsaved live counts will be overwritten.`)) {
       data = JSON.parse(JSON.stringify(rec.data));
       const restoreTs = Date.now();
-      data.forEach(d => { d.updatedAt = restoreTs; });
+      data.forEach(d => { d.updatedAt = restoreTs; d.rev = nextRev(); d.revBy = CLIENT_ID; });
       lastVersion = Date.now();
       saveLocalState();
       switchTab('daily');
@@ -2300,7 +2638,7 @@
         d.acc = 0;
         d.step = "";
         d.notes = "";
-        d.updatedAt = Date.now();
+        stampEdit(d);
         const noteInput = document.getElementById(`notes-${d.id}`);
         if (noteInput) noteInput.value = "";
         const stepSelect = document.getElementById(`step-${d.id}`);
@@ -2347,14 +2685,25 @@
   function initCloudSync() {
     try {
       const brokerUrl = "wss://broker.emqx.io:8084/mqtt";
+      // MQTT clientId must be unique per CONNECTION or the broker evicts the
+      // older session (two tabs / a stale socket would fight and reconnect in a
+      // loop). CLIENT_ID is our stable *device identity* used for merge
+      // bookkeeping, so we connect under a derived per-session id instead.
+      const MQTT_CONNECTION_ID = CLIENT_ID + "-" + Math.random().toString(36).substring(2, 8);
+
       mqttClient = mqtt.connect(brokerUrl, {
-        clientId: CLIENT_ID,
+        clientId: MQTT_CONNECTION_ID,
         clean: true,
-        connectTimeout: 4000,
-        reconnectPeriod: 3000
+        connectTimeout: 8000,      // store Wi-Fi can be slow to hand off
+        reconnectPeriod: 2000,     // retry every 2s after a drop
+        keepalive: 30,             // detect dead links within ~45s
+        resubscribe: true,         // re-subscribe automatically on reconnect
+        queueQoSZero: false
       });
 
       mqttClient.on('connect', () => {
+        syncLog("CONNECT", { clientId: CLIENT_ID, hydrated: stateHydrated,
+                             pending: pendingMembers.size, lastVersion: lastVersion });
         setSyncBadge('🟢 Live Multi-Device Sync Active');
         // Subscribe to BOTH the state topic and the /req topic. Previously we
         // only subscribed to SYNC_TOPIC, which does NOT match SYNC_TOPIC/req
@@ -2376,11 +2725,29 @@
         // what caused stale data to be replayed over good data).
         mqttClient.publish(SYNC_TOPIC + "/req", JSON.stringify({ clientId: CLIENT_ID, version: lastVersion }), { qos: 1 });
 
-        // Flush any edits made while offline. broadcastChange() used to drop
-        // these entirely, silently losing work made during a Wi-Fi blip.
-        if (pendingBroadcast) {
-          pendingBroadcast = false;
-          broadcastChange();
+        // RECONNECT RECONCILIATION — deliberately does NOT dump our snapshot.
+        //
+        // Publishing our whole local state right after reconnecting would
+        // overwrite members that OTHER devices changed while we were offline,
+        // because our copy of those rows is stale.
+        //
+        // Sequence instead:
+        //   1. /req peer state (published just above)
+        //   2. wait briefly; peer rows merge in via Lamport rev comparison
+        //   3. THEN publish the merged result, and only if we hold pending
+        //      local edits. Our pending rows carry higher revs so they survive
+        //      the merge; peer-newer rows correctly beat our stale ones.
+        // If nobody answers (we are the only device) we still publish, so
+        // offline work is never stranded.
+        if (hasPending() || pendingBroadcast) {
+          setSyncBadge('🔄 Reconciling ' + pendingMembers.size + ' offline change(s)...');
+          if (reconcileTimer) clearTimeout(reconcileTimer);
+          reconcileTimer = setTimeout(function() {
+            reconcileTimer = null;
+            pendingBroadcast = false;
+            if (hasPending()) broadcastChange();   // publish MERGED result
+            setSyncBadge('🟢 Live Multi-Device Sync Active');
+          }, RECONCILE_WAIT_MS);
         }
       });
 
@@ -2391,9 +2758,14 @@
           if (!raw || !raw.trim()) return;
           const msg = JSON.parse(raw);
           if (topic.endsWith('/req') && msg.clientId !== CLIENT_ID) {
-            if (lastVersion > 0) {
+            observePeerTimestamp(msg.version);
+            // Only answer if we actually hold meaningful state. Previously a
+            // freshly-reloaded device (lastVersion restored from storage but
+            // roster still all zeroes) would reply and push blanks to everyone.
+            if ((stateHydrated || hasAnyActivity(data) || historyRecords.length > 0) && lastVersion > 0) {
               mqttClient.publish(SYNC_TOPIC, JSON.stringify({
                 clientId: CLIENT_ID,
+                msgId: nextMsgId(),
                 version: lastVersion,
                 data: data,
                 history: historyRecords
@@ -2403,31 +2775,196 @@
           }
 
           if (msg.clientId !== CLIENT_ID && msg.data) {
+            // SHAPE VALIDATION. msg.data must be a NON-EMPTY array of member
+            // rows. A malformed or empty payload must never reach the merge:
+            //   * non-array  -> .forEach throws mid-merge, leaving partial state
+            //   * empty array -> looks like "a peer with no activity", which is
+            //     exactly the shape a wipe takes.
+            if (!Array.isArray(msg.data) || msg.data.length === 0) {
+              syncWarn("REJECT malformed/empty data payload", {
+                from: msg.clientId,
+                type: Object.prototype.toString.call(msg.data),
+                length: (msg.data && msg.data.length) || 0
+              });
+              return;
+            }
+            // Every row must at least carry a usable name, or we cannot match
+            // it to a local record and could adopt garbage.
+            const validRows = msg.data.filter(function(r) {
+              return r && typeof r.name === "string" && r.name.length > 0;
+            });
+            if (validRows.length === 0) {
+              syncWarn("REJECT payload with no valid member rows", { from: msg.clientId });
+              return;
+            }
+            if (validRows.length !== msg.data.length) {
+              syncWarn("Dropped malformed member rows", {
+                from: msg.clientId,
+                dropped: msg.data.length - validRows.length
+              });
+              msg.data = validRows;
+            }
+
+            // DUPLICATE GUARD: QoS 1 can redeliver the identical publish.
+            // Same msgId seen before => unconditionally ignore.
+            if (isDuplicateMsgId(msg.msgId)) {
+              syncLog("DROP duplicate msgId", msg.msgId);
+              setSyncBadge('🟢 Live Multi-Device Sync Active');
+              return;
+            }
+
+            // LOOP GUARD: drop payloads we have already processed, so relayed
+            // state cannot ping-pong between devices.
+            const inboundFp = fingerprint(msg);
+            if (isEchoOfSeenInbound(inboundFp)) {
+              syncLog("DROP echo (already-seen payload)", { from: msg.clientId });
+              setSyncBadge('🟢 Live Multi-Device Sync Active');
+              return;
+            }
+            rememberInbound(inboundFp);
+
             // Per-record merge: only overwrite a team member's fields if the
             // incoming record is newer than what we have locally for THAT
             // person. This prevents one device's change from wiping out an
             // unrelated (or even the same) team member's more recent edit
             // made on another device — no more "last full snapshot wins".
             let appliedAnyChange = false;
+            observePeerTimestamp(msg.version);
+
+            // If an incoming snapshot is entirely blank but we hold real data,
+            // ignore its member rows outright. This is the classic eraser: a
+            // reloaded/rolled-over peer broadcasting zeroes stamped with a
+            // fresh (or clock-skewed) timestamp.
+            const remoteHasActivity = hasAnyActivity(msg.data);
+            const localHasActivity = hasAnyActivity(data);
+            // An explicit, DATE-VALIDATED dayReset is a legitimate blank
+            // payload. `acceptDayReset` is computed just below; until it is
+            // proven we treat a blank payload as a wipe attempt.
+            let remoteIsBlankWipe = !remoteHasActivity && localHasActivity;
+
+            // ------------------------------------------------------------
+            // RULE 14: DAILY ROLLOVER IS DATE-DRIVEN, NEVER SYNC-DRIVEN.
+            // A peer's dayReset is only trusted if OUR OWN calendar agrees the
+            // day actually changed (i.e. the date we archived is genuinely in
+            // the past relative to today). Otherwise we ignore the reset
+            // entirely — an MQTT reconnect at 2 PM must never clear the board.
+            let acceptDayReset = false;
+            if (msg.dayReset) {
+              let localLiveDay = null;
+              try { localLiveDay = localStorage.getItem(STORAGE_KEY_LIVE_DAY); } catch(e) {}
+              const todayStr = getTodayString();
+              const archived = msg.archivedDate;
+
+              const archivedIsPast = !!archived && archived < todayStr;
+              const weAlsoRolled = localLiveDay === todayStr;
+              const weStillOnArchivedDay = localLiveDay === archived;
+
+              // Accept only when the archived day is strictly before today AND
+              // our own stamp corroborates it (we are either already on today,
+              // or still sitting on the day the peer just closed).
+              acceptDayReset = archivedIsPast && (weAlsoRolled || weStillOnArchivedDay || !localLiveDay);
+
+              if (acceptDayReset) {
+                syncLog("dayReset ACCEPTED", { archived: archived, today: todayStr, localLiveDay: localLiveDay });
+                try { localStorage.setItem(STORAGE_KEY_LIVE_DAY, todayStr); } catch(e) {}
+              } else {
+                syncWarn("dayReset REJECTED (date does not justify a reset)", {
+                  archived: archived, today: todayStr, localLiveDay: localLiveDay,
+                  from: msg.clientId
+                });
+              }
+            }
+
+            // Only a validated dayReset may pass a blank payload through.
+            if (acceptDayReset) remoteIsBlankWipe = false;
+
+            let mergedCount = 0;
+            let rejectedCount = 0;
+
             msg.data.forEach(remote => {
               const remoteTs = remote.updatedAt || 0;
+              observePeerTimestamp(remoteTs);
+              observeRev(remote.rev || 0);
               let local = data.find(d => d.name === remote.name);
 
               if (!local) {
                 // Team member exists remotely but not locally yet (e.g. added
                 // via Add Team Member on another device) — adopt them.
+                // GUARDS:
+                //  * never adopt rows out of a payload we already classified as
+                //    a blank wipe (it would inject rows during an erase attempt)
+                //  * only adopt a row that actually carries something (activity
+                //    or a real rev), so corrupt/blank rows cannot pad the roster
+                //  * cap roster growth so a hostile/looping peer cannot grow
+                //    `data` without bound
+                if (remoteIsBlankWipe) { rejectedCount++; return; }
+
+                const remoteRowHasContent = remote.checkedIn ||
+                  ((remote.ac||0) + (remote.upgrade||0) + (remote.services||0) +
+                   (remote.biz||0) + (remote.acc||0)) > 0 ||
+                  (remote.rev || 0) > 0;
+                if (!remoteRowHasContent) { rejectedCount++; return; }
+
+                if (data.length >= MAX_ROSTER_SIZE) {
+                  syncWarn("Refused to adopt member — roster cap reached", {
+                    name: remote.name, cap: MAX_ROSTER_SIZE
+                  });
+                  rejectedCount++;
+                  return;
+                }
+
                 local = Object.assign({}, remote);
                 local.id = data.length > 0 ? Math.max(...data.map(d => d.id)) + 1 : 0;
                 data.push(local);
                 if (!INITIAL_ROSTER.some(m => m.name === local.name)) {
                   INITIAL_ROSTER.push({ name: local.name, role: local.role });
                 }
+                syncLog("ADOPTED new member from peer", { name: local.name, from: msg.clientId });
                 appliedAnyChange = true;
+                mergedCount++;
                 return;
               }
 
               const localTs = local.updatedAt || 0;
-              if (remoteTs > localTs) {
+              const localRev = local.rev || 0;
+              const remoteRev = remote.rev || 0;
+
+              // Reject a blanket wipe coming from an unhydrated/rolled-over peer.
+              if (remoteIsBlankWipe) { rejectedCount++; return; }
+
+              // CONFLICT RESOLUTION VIA LOGICAL CLOCK (skew-immune).
+              // A remote row only wins if its logical revision is strictly
+              // higher. Equal revs (concurrent edits) break deterministically
+              // on clientId so every device converges on the same winner.
+              let remoteWins;
+              if (acceptDayReset) {
+                remoteWins = true;                     // validated day boundary
+              } else if (remoteRev !== localRev) {
+                remoteWins = remoteRev > localRev;
+              } else if (remoteRev === 0 && localRev === 0) {
+                // Legacy rows with no rev yet: fall back to wall clock, but
+                // never let a blank remote erase populated local data.
+                const remoteMemberBlank = !remote.checkedIn &&
+                  ((remote.ac||0) + (remote.upgrade||0) + (remote.services||0) + (remote.biz||0) + (remote.acc||0)) === 0;
+                const localMemberHasData = local.checkedIn ||
+                  ((local.ac||0) + (local.upgrade||0) + (local.services||0) + (local.biz||0) + (local.acc||0)) > 0;
+                if (remoteMemberBlank && localMemberHasData) return;
+                remoteWins = remoteTs > localTs;
+              } else {
+                // Same rev from two devices (concurrent edit, or a peer
+                // replaying a stale row at an equal rev). NEVER let an equal-rev
+                // blank row destroy populated data — prefer the side that holds
+                // real values, and only fall back to the deterministic
+                // clientId tie-break when both sides are comparable.
+                const remoteMemberBlank = !remote.checkedIn &&
+                  ((remote.ac||0) + (remote.upgrade||0) + (remote.services||0) + (remote.biz||0) + (remote.acc||0)) === 0;
+                const localMemberHasData = local.checkedIn ||
+                  ((local.ac||0) + (local.upgrade||0) + (local.services||0) + (local.biz||0) + (local.acc||0)) > 0;
+                if (remoteMemberBlank && localMemberHasData) return;
+                remoteWins = String(remote.revBy || "") > String(local.revBy || "");
+              }
+
+              if (remoteWins) {
                 local.checkedIn = remote.checkedIn;
                 local.ac = remote.ac;
                 local.upgrade = remote.upgrade;
@@ -2437,30 +2974,83 @@
                 local.step = remote.step || "";
                 local.notes = remote.notes;
                 local.updatedAt = remoteTs;
+                local.rev = remoteRev;
+                local.revBy = remote.revBy || "";
                 appliedAnyChange = true;
+                mergedCount++;
               }
             });
 
             if (Array.isArray(msg.history)) {
-              // Merge history by date instead of blind overwrite, keeping
-              // whichever record per date is newest.
+              // Merge history by date. NEVER replace the whole array, and never
+              // accept an archived day that is not structurally valid — a bad
+              // record here would silently destroy a completed day, which also
+              // feeds Prior Day / Weekly / Monthly / Quarterly.
               msg.history.forEach(remoteRec => {
+                if (!remoteRec || typeof remoteRec.date !== "string" || !remoteRec.date) {
+                  syncWarn("Skipped history record with no valid date", { from: msg.clientId });
+                  return;
+                }
+                if (!Array.isArray(remoteRec.data) || remoteRec.data.length === 0) {
+                  syncWarn("Skipped history record with malformed/empty data", {
+                    date: remoteRec.date, from: msg.clientId
+                  });
+                  return;
+                }
+
                 const idx = historyRecords.findIndex(r => r.date === remoteRec.date);
                 if (idx === -1) {
+                  if (historyRecords.length >= MAX_HISTORY_DAYS) {
+                    syncWarn("History cap reached — not adding remote day", {
+                      date: remoteRec.date, cap: MAX_HISTORY_DAYS
+                    });
+                    return;
+                  }
                   historyRecords.push(remoteRec);
                   appliedAnyChange = true;
                 } else if ((remoteRec.timestamp || 0) > (historyRecords[idx].timestamp || 0)) {
+                  // Newer archive of the SAME day. Only accept it if it is not
+                  // emptier than what we already hold, so a stripped-down
+                  // rebroadcast cannot hollow out a good archived day.
+                  const existing = historyRecords[idx];
+                  const existingActive = hasAnyActivity(existing.data || []);
+                  const incomingActive = hasAnyActivity(remoteRec.data);
+                  if (existingActive && !incomingActive) {
+                    syncWarn("Refused to replace archived day with an empty one", {
+                      date: remoteRec.date, from: msg.clientId
+                    });
+                    rejectedCount++;
+                    return;
+                  }
                   historyRecords[idx] = remoteRec;
                   appliedAnyChange = true;
                 }
               });
             }
 
+            // The global `version` is bookkeeping ONLY — it must never decide
+            // whether records get processed. A message with a HIGHER global
+            // version can still contain OLDER individual records (e.g. a peer
+            // rebroadcasting a stale row it never updated), and a message with
+            // a LOWER global version can contain a NEWER record for one member.
+            // Authority therefore lives at the record level (Lamport `rev`,
+            // handled per-member above). We only track the max version seen so
+            // our own future publishes stay monotonically ordered.
             if (msg.version && msg.version > lastVersion) {
               lastVersion = msg.version;
             }
 
+            syncLog("MERGE", { from: msg.clientId, applied: mergedCount,
+                               rejected: rejectedCount, blankWipeBlocked: remoteIsBlankWipe,
+                               dayResetAccepted: acceptDayReset });
+
             if (appliedAnyChange) {
+              stateHydrated = true;
+              // LOOP GUARD: intentionally NO broadcastChange() here. Merging a
+              // peer update must never trigger our own publish, or A and B echo
+              // the same state back and forth forever. We publish only when
+              // this device originates a change, or when reconciling pending
+              // offline work on reconnect.
               saveLocalState();
               if (currentTab === 'daily') {
                 updateTotals();
@@ -2478,33 +3068,93 @@
         } catch(err) {}
       });
 
-      mqttClient.on('error', () => setSyncBadge('💾 Saved to iPad'));
+      mqttClient.on('reconnect', () => {
+        syncLog("RECONNECT ATTEMPT", { pending: pendingMembers.size });
+        setSyncBadge(hasPending()
+          ? '🔄 Reconnecting — ' + pendingMembers.size + ' change(s) queued'
+          : '🔄 Reconnecting...');
+      });
+
+      mqttClient.on('close', () => {
+        syncLog("SOCKET CLOSED");
+        if (reconcileTimer) { clearTimeout(reconcileTimer); reconcileTimer = null; }
+      });
+
+      mqttClient.on('error', (err) => {
+        syncWarn("MQTT ERROR", err && err.message ? err.message : err);
+        // Do not leave a half-dead socket in place; end it so mqtt.js runs its
+        // reconnect cycle cleanly.
+        try {
+          if (mqttClient && !mqttClient.connected) mqttClient.end(true);
+        } catch (e) {}
+        setSyncBadge(hasPending()
+          ? '💾 Saved on iPad — ' + pendingMembers.size + ' change(s) queued'
+          : '💾 Saved to iPad');
+      });
       mqttClient.on('offline', () => {
         // Mark that this device may have unsent work; it will be flushed on
         // the next successful connect.
         pendingBroadcast = true;
-        setSyncBadge('💾 Saved to iPad (will sync when online)');
+        if (reconcileTimer) { clearTimeout(reconcileTimer); reconcileTimer = null; }
+        // Edits keep flowing to localStorage + pendingMembers while offline;
+        // nothing is lost and nothing is published until we are back online.
+        setSyncBadge(hasPending()
+          ? '💾 Saved on iPad — ' + pendingMembers.size + ' change(s) queued'
+          : '💾 Saved to iPad (will sync when online)');
       });
     } catch(e) {
-      setSyncBadge('💾 Saved to iPad');
+      // MQTT could not even be initialised (blocked WebSocket, offline start,
+      // CDN failure). This is NON-FATAL: the app keeps working as a local
+      // tracker and every edit still persists to localStorage. Nothing is lost;
+      // it simply will not share with other iPads until the socket comes up.
+      mqttClient = null;
+      pendingBroadcast = true;
+      setSyncBadge('💾 Offline — saving locally only');
     }
   }
 
   function broadcastChange() {
-    lastVersion = Date.now();
+    lastVersion = syncNow();
+    // LOCAL FIRST, ALWAYS. The local cache is written before any network work
+    // and its success is completely independent of MQTT. A publish failure
+    // below can never undo, skip, or corrupt this save.
     saveLocalState();
+
+    // SAFETY GATE: never publish a roster that has no activity while we also
+    // have no hydrated state. That combination only happens on a fresh/reloaded
+    // device before it has caught up, and publishing it overwrites live data on
+    // every other iPad. Local save above still happened, so nothing is lost.
+    if (!stateHydrated && !hasAnyActivity(data) && historyRecords.length === 0) {
+      syncWarn("BLOCKED publish of empty/unhydrated state (this is the eraser guard)");
+      pendingBroadcast = true;
+      return;
+    }
     if (mqttClient && mqttClient.connected) {
       try {
         // NOTE: retain is deliberately FALSE. Using retained messages meant the
         // broker replayed an old full snapshot to every device that connected or
         // briefly dropped Wi-Fi — which overwrote good current data with stale
         // data and is what made whole days appear to erase themselves.
-        mqttClient.publish(SYNC_TOPIC, JSON.stringify({
+        const envelope = {
           clientId: CLIENT_ID,
+          msgId: nextMsgId(),
           version: lastVersion,
           data: data,
           history: historyRecords
-        }), { qos: 1, retain: false });
+        };
+        const fp = fingerprint(envelope);
+
+        // LOOP GUARD: never send a byte-identical payload twice in a row.
+        if (fp && fp === lastOutboundFingerprint) {
+          syncLog("SKIP publish (identical to previous payload)");
+          pendingBroadcast = false;
+          return;
+        }
+
+        mqttClient.publish(SYNC_TOPIC, JSON.stringify(envelope), { qos: 1, retain: false });
+        syncLog("PUBLISH", { msgId: envelope.msgId, pendingCleared: pendingMembers.size });
+        lastOutboundFingerprint = fp;
+        clearPending();   // our work is on the wire
         pendingBroadcast = false;
       } catch(e) {
         pendingBroadcast = true;
@@ -2515,6 +3165,47 @@
       pendingBroadcast = true;
     }
   }
+
+  // Explicit, intentional day-boundary reset. Flagged so receivers apply it
+  // even though the payload is "blank" (which the eraser guard would reject).
+  function broadcastDayReset(ts, archivedDate) {
+    lastVersion = ts;
+    saveLocalState();
+    if (mqttClient && mqttClient.connected) {
+      try {
+        mqttClient.publish(SYNC_TOPIC, JSON.stringify({
+          clientId: CLIENT_ID,
+          msgId: nextMsgId(),
+          version: ts,
+          dayReset: true,
+          archivedDate: archivedDate,
+          data: data,
+          history: historyRecords
+        }), { qos: 1, retain: false });
+        pendingBroadcast = false;
+      } catch (e) {
+        pendingBroadcast = true;
+      }
+    } else {
+      pendingBroadcast = true;
+    }
+  }
+
+  // iPadOS suspends background tabs, which can silently kill the socket.
+  // Re-check the connection whenever we return to the foreground or the OS
+  // reports the network is back.
+  function ensureConnected() {
+    try {
+      if (mqttClient && !mqttClient.connected && !mqttClient.reconnecting) {
+        mqttClient.reconnect();
+      }
+    } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) ensureConnected();
+  });
+  window.addEventListener('online', ensureConnected);
+  window.addEventListener('focus', ensureConnected);
 
   function setSyncBadge(txt) {
     const el = document.getElementById('syncStatus');
