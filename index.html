@@ -773,13 +773,12 @@
     <div class="app-title">
       🛍️PZ Focus & Follow 🆙
       <span class="sync-badge" id="syncStatus">🔄 Connecting Cloud Sync...</span>
-      <span class="sync-badge" id="autoSaveBadge">⏰ Auto-Save: 8:59 PM • Daily Reset: 11:59 PM</span>
+      <span class="sync-badge" id="autoSaveBadge">⚡ Real-Time Sync • Saves Automatically</span>
     </div>
     <div class="btn-group">
       <button class="secondary" id="btnAddMember" onclick="promptAddTeamMember()" title="Add new team member">➕ Add Team Member</button>
       <button class="undo-btn" id="btnUndo" onclick="undoLastAction()" title="Undo last change">↩️ Undo</button>
       <button class="secondary" id="btnLock" onclick="lockDeviceNow()" title="Lock this iPad with store PIN">🔒 Lock</button>
-      <button class="secondary" id="btnSave" onclick="saveCurrentDay(false)">💾 Save Day</button>
       <button class="secondary" id="btnClearCheckins" onclick="checkAll(false)">◻️ Clear Check-Ins</button>
       <button class="secondary" onclick="exportCSV()">📥 Export CSV</button>
       <button class="danger" id="btnReset" onclick="resetCounts()">🔄 Reset Day</button>
@@ -940,7 +939,7 @@
   <div class="history-card" id="historyCard">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
       <h2 style="font-size: 18px; font-weight: 700;">📜 Daily Shift History Logs</h2>
-      <button class="secondary" onclick="saveCurrentDay(false)">💾 Save Today's Shift</button>
+      <span style="font-size: 12px; color: var(--text-secondary);">⚡ Archived automatically at end of day</span>
     </div>
     <div id="historyListContainer"></div>
   </div>
@@ -1055,6 +1054,9 @@
   let historyRecords = [];
   let lastVersion = 0;
   let mqttClient = null;
+  // Tracks edits made while disconnected so they can be flushed on reconnect
+  // instead of being silently dropped.
+  let pendingBroadcast = false;
 
   function escapeHtml(str) {
     if (!str) return '';
@@ -1987,7 +1989,6 @@
     if (tab === 'daily') {
       periodSelector.style.display = 'none';
       if (btnUndo) btnUndo.style.display = 'inline-flex';
-      if (btnSave) btnSave.style.display = 'inline-flex';
       btnClearCheckins.style.display = 'inline-flex';
       btnReset.style.display = 'inline-flex';
       if (btnAddMember) btnAddMember.style.display = 'inline-flex';
@@ -1996,7 +1997,6 @@
     } else if (tab === 'priorday') {
       periodSelector.style.display = 'none';
       if (btnUndo) btnUndo.style.display = 'none';
-      if (btnSave) btnSave.style.display = 'none';
       btnClearCheckins.style.display = 'none';
       btnReset.style.display = 'none';
       if (btnAddMember) btnAddMember.style.display = 'none';
@@ -2005,7 +2005,6 @@
     } else {
       periodSelector.style.display = 'inline-block';
       if (btnUndo) btnUndo.style.display = 'none';
-      if (btnSave) btnSave.style.display = 'none';
       btnClearCheckins.style.display = 'none';
       btnReset.style.display = 'none';
       if (btnAddMember) btnAddMember.style.display = 'none';
@@ -2108,7 +2107,7 @@
       badge.style.borderColor = '#34c759';
       badge.style.color = '#34c759';
       setTimeout(() => {
-        badge.textContent = '⏰ Auto-Archive: 8:59 PM Daily';
+        badge.textContent = '⚡ Real-Time Sync • Saves Automatically';
         badge.style.borderColor = '';
         badge.style.color = '';
       }, 10000);
@@ -2173,17 +2172,18 @@
   }
 
   function setupAutoEngines() {
-    let lastHourlySaveHour = -1;
-
     function runEngines() {
-      const now = new Date();
-      const curHour = now.getHours();
-      const curMin = now.getMinutes();
-      const today = getTodayString();
-
-      // 0. Date-based rollover catch-up — runs every tick regardless of the
-      // exact time, so a missed 8:59/11:59 window (device asleep, tab
-      // closed, gate locked) is corrected the moment the app is next active.
+      // Date-based rollover — the ONLY scheduled job that remains. Everything
+      // else (saving + syncing) now happens instantly on every edit via
+      // broadcastChange(), so there is no hourly checkpoint and no 8:59 PM /
+      // 11:59 PM snapshot job to miss.
+      //
+      // This still needs to run on a timer because it's the thing that closes
+      // out a finished day: when the calendar date changes, it archives the
+      // live board to History (which feeds Prior Day, Weekly, Monthly and
+      // Quarterly) and clears the board for the new day. It's date-comparison
+      // based, so it self-corrects whenever the app next becomes active — no
+      // dependency on being open at a precise minute.
       const rolledOver = rolloverDayIfNeeded();
       if (rolledOver) {
         if (currentTab === 'daily') {
@@ -2196,68 +2196,8 @@
         }
       }
 
-      // 1. Hourly State Checkpoint + Passcode Gate Recheck
-      if (curHour !== lastHourlySaveHour) {
-        lastHourlySaveHour = curHour;
-        saveLocalState();
-        checkPasscodeGate();
-        flashAutoSaveBadge(`💾 Auto-Saved Hourly Checkpoint (${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})`);
-      }
-
-      // 2. 8:59 PM Auto-Snapshot to Prior Day (Non-Destructive: does NOT delete same-day live data)
-      const isPast859PM = (curHour === 20 && curMin >= 59) || (curHour >= 21);
-      if (isPast859PM) {
-        const hasActiveData = data.some(d => d.checkedIn || (d.ac + d.upgrade + d.services + d.biz + d.acc) > 0);
-        if (hasActiveData) {
-          saveCurrentDay(true); // Non-destructive save & roll to Prior Day, Weekly, Monthly, Quarterly
-        }
-      }
-
-      // 3. 11:59 PM Midnight EOD Reset (Clears live daily board for next morning)
-      const isMidnightReset = (curHour === 23 && curMin >= 59);
-      if (isMidnightReset) {
-        const alreadyResetKey = 'pz_tracker_midnight_reset_' + today;
-        let alreadyReset = false;
-        try {
-          alreadyReset = localStorage.getItem(alreadyResetKey) === 'true';
-        } catch(e) {}
-
-        if (!alreadyReset) {
-          // Ensure final snapshot saved before wiping
-          saveCurrentDay(true);
-
-          // Reset live daily board for next morning
-          data.forEach(d => {
-            d.checkedIn = false;
-            d.ac = 0;
-            d.upgrade = 0;
-            d.services = 0;
-            d.biz = 0;
-            d.acc = 0;
-            d.step = "";
-            d.notes = "";
-            d.updatedAt = Date.now();
-          });
-
-          try {
-            localStorage.setItem(alreadyResetKey, 'true');
-            localStorage.setItem(STORAGE_KEY_LIVE_DAY, today);
-          } catch(e) {}
-
-          lastVersion = Date.now();
-          saveLocalState();
-          broadcastChange();
-          flashAutoSaveBadge(`🌙 Daily Shift Closed (Board Reset for Next Morning)`);
-
-          if (currentTab === 'daily') {
-            renderTableStructure();
-            updateTotals();
-            reorderRows();
-          } else if (currentTab === 'priorday' || currentTab === 'history') {
-            switchTab(currentTab);
-          }
-        }
-      }
+      // Keep enforcing the 1-hour passcode expiry.
+      checkPasscodeGate();
     }
 
     // Check every 30 seconds
@@ -2274,7 +2214,7 @@
       container.innerHTML = `
         <div style="padding: 30px; text-align: center; color: var(--text-secondary);">
           <h3>No Shift History Yet</h3>
-          <p style="margin-top: 6px; font-size: 13px;">Tap "Save Day" or let the 8:59 PM auto-save run to build your daily history logs.</p>
+          <p style="margin-top: 6px; font-size: 13px;">Each day is archived here automatically once the date changes.</p>
         </div>
       `;
       return;
@@ -2416,13 +2356,40 @@
 
       mqttClient.on('connect', () => {
         setSyncBadge('🟢 Live Multi-Device Sync Active');
+        // Subscribe to BOTH the state topic and the /req topic. Previously we
+        // only subscribed to SYNC_TOPIC, which does NOT match SYNC_TOPIC/req
+        // in MQTT — so no device ever heard another device's catch-up request
+        // and the whole reconnect/state-recovery path was dead.
         mqttClient.subscribe(SYNC_TOPIC, { qos: 1 });
-        mqttClient.publish(SYNC_TOPIC + "/req", JSON.stringify({ clientId: CLIENT_ID, version: lastVersion }));
+        mqttClient.subscribe(SYNC_TOPIC + "/req", { qos: 1 });
+
+        // Purge any previously-retained snapshot left on the broker by older
+        // versions of this app. A retained payload is re-delivered to every
+        // device that connects, so a single stale snapshot could keep wiping
+        // out good data indefinitely. Publishing an empty retained payload
+        // clears it permanently.
+        try {
+          mqttClient.publish(SYNC_TOPIC, "", { qos: 1, retain: true });
+        } catch(e) {}
+
+        // Ask peers for current state (not retained — retained snapshots are
+        // what caused stale data to be replayed over good data).
+        mqttClient.publish(SYNC_TOPIC + "/req", JSON.stringify({ clientId: CLIENT_ID, version: lastVersion }), { qos: 1 });
+
+        // Flush any edits made while offline. broadcastChange() used to drop
+        // these entirely, silently losing work made during a Wi-Fi blip.
+        if (pendingBroadcast) {
+          pendingBroadcast = false;
+          broadcastChange();
+        }
       });
 
       mqttClient.on('message', (topic, payload) => {
         try {
-          const msg = JSON.parse(payload.toString());
+          const raw = payload.toString();
+          // Ignore empty payloads (used to purge stale retained messages).
+          if (!raw || !raw.trim()) return;
+          const msg = JSON.parse(raw);
           if (topic.endsWith('/req') && msg.clientId !== CLIENT_ID) {
             if (lastVersion > 0) {
               mqttClient.publish(SYNC_TOPIC, JSON.stringify({
@@ -2430,7 +2397,7 @@
                 version: lastVersion,
                 data: data,
                 history: historyRecords
-              }), { qos: 1, retain: true });
+              }), { qos: 1, retain: false });
             }
             return;
           }
@@ -2512,7 +2479,12 @@
       });
 
       mqttClient.on('error', () => setSyncBadge('💾 Saved to iPad'));
-      mqttClient.on('offline', () => setSyncBadge('💾 Saved to iPad'));
+      mqttClient.on('offline', () => {
+        // Mark that this device may have unsent work; it will be flushed on
+        // the next successful connect.
+        pendingBroadcast = true;
+        setSyncBadge('💾 Saved to iPad (will sync when online)');
+      });
     } catch(e) {
       setSyncBadge('💾 Saved to iPad');
     }
@@ -2523,13 +2495,24 @@
     saveLocalState();
     if (mqttClient && mqttClient.connected) {
       try {
+        // NOTE: retain is deliberately FALSE. Using retained messages meant the
+        // broker replayed an old full snapshot to every device that connected or
+        // briefly dropped Wi-Fi — which overwrote good current data with stale
+        // data and is what made whole days appear to erase themselves.
         mqttClient.publish(SYNC_TOPIC, JSON.stringify({
           clientId: CLIENT_ID,
           version: lastVersion,
           data: data,
           history: historyRecords
-        }), { qos: 1, retain: true });
-      } catch(e) {}
+        }), { qos: 1, retain: false });
+        pendingBroadcast = false;
+      } catch(e) {
+        pendingBroadcast = true;
+      }
+    } else {
+      // Offline: remember that we owe the room an update, and send it as soon
+      // as we reconnect rather than losing the edit entirely.
+      pendingBroadcast = true;
     }
   }
 
