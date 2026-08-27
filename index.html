@@ -1130,6 +1130,10 @@
   // Tracks edits made while disconnected so they can be flushed on reconnect
   // instead of being silently dropped.
   let pendingBroadcast = false;
+  // Room-wide manual reset state. Only today's LIVE board is affected.
+  let lastManualResetId = '';
+  let lastManualResetTs = 0;
+
 
   // ------------------------------------------------------------------
   // DEFENSIVE SYNC LOGGING
@@ -1504,6 +1508,17 @@
     }
     return true;
   }
+
+  // If this iPad was previously reset by the room, never resurrect the
+  // pre-reset live board from a stale local cache after a reload.
+  try {
+    const savedResetDay = localStorage.getItem('pz_room_reset_day');
+    const savedResetTs = Number(localStorage.getItem('pz_room_reset_ts') || 0);
+    const savedResetId = localStorage.getItem('pz_room_reset_id') || '';
+    if (savedResetDay === getTodayString() && savedResetTs > 0) {
+      clearLiveTrackerForRoom(savedResetId, savedResetTs, 'room-reset', savedResetDay);
+    }
+  } catch (e) {}
 
   // Immediately persist state after restore/recreate logic above, so any
   // dynamically-recreated team members (added via ➕ Add Team Member in a
@@ -2647,29 +2662,121 @@
     a.click();
   }
 
-  function resetCounts() {
-    if (confirm("Reset today's active metrics, steps, and check-ins to 0? (Archived history will remain saved)")) {
-      data.forEach(d => {
-        d.checkedIn = false;
-        d.ac = 0;
-        d.upgrade = 0;
-        d.services = 0;
-        d.biz = 0;
-        d.acc = 0;
-        d.step = "";
-        d.notes = "";
-        stampEdit(d);
-        const noteInput = document.getElementById(`notes-${d.id}`);
-        if (noteInput) noteInput.value = "";
-        const stepSelect = document.getElementById(`step-${d.id}`);
-        if (stepSelect) stepSelect.value = "";
-        renderCheckInVisual(d.id);
+  function clearLiveTrackerForRoom(resetId, resetTs, sourceClientId, resetDay) {
+    resetTs = Number(resetTs || 0);
+    resetDay = resetDay || getTodayString();
+
+    // A manual reset only applies to the current calendar day.
+    // Historical records are NEVER touched by this function.
+    if (resetDay !== getTodayString()) return false;
+
+    // Idempotent + monotonic: QoS 1 may deliver the same reset more than once,
+    // and delayed packets must never undo a newer reset.
+    if (resetId && resetId === lastManualResetId) return false;
+    if (resetTs && resetTs < lastManualResetTs) return false;
+
+    lastManualResetId = resetId || ('reset_' + resetTs);
+    lastManualResetTs = resetTs || syncNow();
+
+    data.forEach(d => {
+      d.checkedIn = false;
+      d.ac = 0;
+      d.upgrade = 0;
+      d.services = 0;
+      d.biz = 0;
+      d.acc = 0;
+      d.step = "";
+      d.notes = "";
+      d.updatedAt = lastManualResetTs;
+      d.rev = nextRev();
+      d.revBy = sourceClientId || CLIENT_ID;
+    });
+
+    // A room reset supersedes unsent live edits. History is intentionally kept.
+    clearPending();
+    pendingBroadcast = false;
+    lastOutboundFingerprint = '';
+
+    // Persist the reset marker so a reload cannot resurrect the pre-reset live
+    // board from localStorage.
+    try {
+      localStorage.setItem('pz_room_reset_id', lastManualResetId);
+      localStorage.setItem('pz_room_reset_ts', String(lastManualResetTs));
+      localStorage.setItem('pz_room_reset_day', resetDay);
+    } catch (e) {}
+
+    saveLocalState();
+    updateTotals();
+    renderTableStructure();
+    reorderRows();
+
+    setSyncBadge('🧹 Live Day Reset Across Store');
+    syncLog("ROOM RESET APPLIED", {
+      resetId: lastManualResetId,
+      resetTs: lastManualResetTs,
+      from: sourceClientId || CLIENT_ID,
+      resetDay: resetDay,
+      historyPreserved: true
+    });
+
+    return true;
+  }
+
+  function publishRoomReset() {
+    if (!mqttClient || !mqttClient.connected) {
+      setSyncBadge('⚠️ MQTT offline — cannot reset all iPads');
+      syncWarn("ROOM RESET BLOCKED: MQTT offline");
+      return false;
+    }
+
+    const resetTs = syncNow();
+    const resetId = CLIENT_ID + '_' + resetTs + '_' +
+      Math.random().toString(36).slice(2, 8);
+    const resetDay = getTodayString();
+
+    // Apply locally first. This guarantees the initiating iPad is reset even
+    // if the network fails immediately afterward.
+    clearLiveTrackerForRoom(resetId, resetTs, CLIENT_ID, resetDay);
+
+    try {
+      mqttClient.publish(
+        SYNC_TOPIC + '/reset',
+        JSON.stringify({
+          type: 'manual-room-reset',
+          resetId: resetId,
+          clientId: CLIENT_ID,
+          timestamp: resetTs,
+          resetDay: resetDay
+        }),
+        // RETAIN IS INTENTIONAL FOR THIS COMMAND ONLY. An iPad that was
+        // offline when Reset Day was pressed will receive the latest reset
+        // immediately when it reconnects. No live data snapshot is retained.
+        { qos: 1, retain: true }
+      );
+
+      syncLog("ROOM RESET PUBLISHED", {
+        resetId: resetId,
+        resetDay: resetDay,
+        topic: SYNC_TOPIC + '/reset',
+        historyPreserved: true
       });
-      lastVersion = Date.now();
-      saveLocalState();
-      updateTotals();
-      broadcastChange();
-      setTimeout(reorderRows, 60);
+      setSyncBadge('🧹 Reset Sent to All iPads');
+      return true;
+    } catch (e) {
+      setSyncBadge('⚠️ Reset applied here — MQTT send failed');
+      syncWarn("ROOM RESET PUBLISH FAILED", e && e.message ? e.message : e);
+      return false;
+    }
+  }
+
+  function resetCounts() {
+    if (confirm(
+      "RESET TODAY'S LIVE TRACKER ON ALL IPADS?\n\n" +
+      "This will clear today's check-ins, metrics, steps, and notes on every " +
+      "connected/reconnecting iPad.\n\n" +
+      "Historical / previous-day records will NOT be deleted."
+    )) {
+      publishRoomReset();
     }
   }
 
@@ -2731,15 +2838,10 @@
         // and the whole reconnect/state-recovery path was dead.
         mqttClient.subscribe(SYNC_TOPIC, { qos: 1 });
         mqttClient.subscribe(SYNC_TOPIC + "/req", { qos: 1 });
-
-        // Purge any previously-retained snapshot left on the broker by older
-        // versions of this app. A retained payload is re-delivered to every
-        // device that connects, so a single stale snapshot could keep wiping
-        // out good data indefinitely. Publishing an empty retained payload
-        // clears it permanently.
-        try {
-          mqttClient.publish(SYNC_TOPIC, "", { qos: 1, retain: true });
-        } catch(e) {}
+        // Manual room resets are retained intentionally. Unlike a state
+        // snapshot, the retained value is a single command that tells a
+        // returning/offline iPad that today's board has already been reset.
+        mqttClient.subscribe(SYNC_TOPIC + "/reset", { qos: 1 });
 
         // Ask peers for current state (not retained — retained snapshots are
         // what caused stale data to be replayed over good data).
@@ -2777,6 +2879,41 @@
           // Ignore empty payloads (used to purge stale retained messages).
           if (!raw || !raw.trim()) return;
           const msg = JSON.parse(raw);
+          // EXPLICIT ROOM-WIDE MANUAL RESET.
+          // This is the ONLY reset command that is allowed to clear today's
+          // live board from an MQTT message. It does not touch history.
+          if (msg.type === 'manual-room-reset') {
+            const resetDay = String(msg.resetDay || '');
+            const resetTs = Number(msg.timestamp || 0);
+            const resetId = String(msg.resetId || msg.msgId || '');
+
+            if (!resetId || resetDay !== getTodayString()) {
+              syncLog("ROOM RESET IGNORED", {
+                resetId: resetId,
+                resetDay: resetDay,
+                today: getTodayString()
+              });
+              return;
+            }
+
+            const applied = clearLiveTrackerForRoom(
+              resetId,
+              resetTs,
+              msg.clientId || 'remote',
+              resetDay
+            );
+
+            if (applied) {
+              syncLog("ROOM RESET RECEIVED", {
+                resetId: resetId,
+                from: msg.clientId,
+                historyPreserved: true
+              });
+            }
+            return;
+          }
+
+
           if (topic.endsWith('/req') && msg.clientId !== CLIENT_ID) {
             observePeerTimestamp(msg.version);
             // Only answer if we actually hold meaningful state. Previously a
