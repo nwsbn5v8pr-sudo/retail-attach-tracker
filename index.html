@@ -1209,6 +1209,24 @@
     return pendingMembers.size > 0;
   }
 
+  // When this iPad learns something newer from another iPad, rebroadcast the
+  // merged state once after a short debounce. This is important when 20 iPads
+  // are rotated through the store: an iPad that was offline can receive the
+  // newest record, then help propagate that record to another iPad that was
+  // offline earlier. Because records use Lamport revisions, peers only apply
+  // genuinely newer rows, so this does not create an echo loop.
+  function scheduleReconcilePublish() {
+    if (reconcilePublishTimer) return;
+    reconcilePublishTimer = setTimeout(function() {
+      reconcilePublishTimer = null;
+      if (mqttClient && mqttClient.connected && stateHydrated) {
+        broadcastChange();
+      } else {
+        pendingBroadcast = true;
+      }
+    }, RECONCILE_REBROADCAST_DELAY_MS);
+  }
+
   // ------------------------------------------------------------------
   // LOOP PREVENTION
   //   1. Merging a peer's update NEVER auto-publishes (see message handler).
@@ -1220,8 +1238,10 @@
   const MAX_ROSTER_SIZE = 500;
   const MAX_HISTORY_DAYS = 400;
 
-  const RECONCILE_WAIT_MS = 1200;   // grace period for peers to answer /req
+  const RECONCILE_WAIT_MS = 1500;   // give up to 1.5s for active peers to answer /req
+  const RECONCILE_REBROADCAST_DELAY_MS = 350;
   let reconcileTimer = null;
+  let reconcilePublishTimer = null;
   let lastOutboundFingerprint = "";
   const seenInbound = [];
   const SEEN_INBOUND_MAX = 40;
@@ -3046,12 +3066,15 @@
 
             if (appliedAnyChange) {
               stateHydrated = true;
-              // LOOP GUARD: intentionally NO broadcastChange() here. Merging a
-              // peer update must never trigger our own publish, or A and B echo
-              // the same state back and forth forever. We publish only when
-              // this device originates a change, or when reconciling pending
-              // offline work on reconnect.
+              // Persist the merged state immediately, then schedule ONE
+              // reconciliation publish. Older versions intentionally never
+              // rebroadcast a received merge; that prevented loops, but it
+              // also meant an offline iPad could remain stale indefinitely.
+              // Lamport revs + inbound fingerprint guards make this safe: a
+              // peer receiving the same merged snapshot has nothing newer to
+              // apply and will not keep rebroadcasting it.
               saveLocalState();
+              scheduleReconcilePublish();
               if (currentTab === 'daily') {
                 updateTotals();
                 reorderRows();
@@ -3078,6 +3101,7 @@
       mqttClient.on('close', () => {
         syncLog("SOCKET CLOSED");
         if (reconcileTimer) { clearTimeout(reconcileTimer); reconcileTimer = null; }
+        if (reconcilePublishTimer) { clearTimeout(reconcilePublishTimer); reconcilePublishTimer = null; }
       });
 
       mqttClient.on('error', (err) => {
@@ -3096,6 +3120,7 @@
         // the next successful connect.
         pendingBroadcast = true;
         if (reconcileTimer) { clearTimeout(reconcileTimer); reconcileTimer = null; }
+        if (reconcilePublishTimer) { clearTimeout(reconcilePublishTimer); reconcilePublishTimer = null; }
         // Edits keep flowing to localStorage + pendingMembers while offline;
         // nothing is lost and nothing is published until we are back online.
         setSyncBadge(hasPending()
