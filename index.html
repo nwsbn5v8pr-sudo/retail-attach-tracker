@@ -733,9 +733,73 @@
     background: transparent;
     color: var(--accent);
   }
+
+  .member-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    background: rgba(0,0,0,.55);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .member-modal-backdrop.active { display: flex; }
+  .member-modal {
+    width: min(430px, 100%);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.3);
+  }
+  .member-modal h3 { margin-bottom: 12px; }
+  .member-modal label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin: 10px 0 5px;
+  }
+  .member-modal input,
+  .member-modal select {
+    width: 100%;
+    height: 40px;
+    padding: 0 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 9px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+  }
+  .member-modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 16px;
+  }
+
 </style>
 </head>
 <body>
+
+
+  <!-- Team Member Removal -->
+  <div class="member-modal-backdrop" id="removeMemberModal">
+    <div class="member-modal">
+      <h3>➖ Permanently Remove Team Member</h3>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;">
+        This removes the person from the active roster on the shared tracker.
+        Historical logs remain preserved.
+      </p>
+      <label for="removeMemberSelect">Team Member</label>
+      <select id="removeMemberSelect"></select>
+      <div class="member-modal-actions">
+        <button class="secondary" onclick="closeRemoveMemberModal()">Cancel</button>
+        <button class="danger" onclick="confirmRemoveMember()">Permanently Delete</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Passcode Gate Screen -->
   <div class="auth-overlay" id="authGate">
@@ -778,6 +842,7 @@
     </div>
     <div class="btn-group">
       <button class="secondary" id="btnAddMember" onclick="promptAddTeamMember()" title="Add new team member">➕ Add Team Member</button>
+      <button class="danger" id="btnRemoveMember" onclick="openRemoveMemberModal()" title="Permanently remove team member">➖ Remove Team Member</button>
       <button class="undo-btn" id="btnUndo" onclick="undoLastAction()" title="Undo last change">↩️ Undo</button>
       <button class="secondary" id="btnLock" onclick="lockDeviceNow()" title="Lock this iPad with store PIN">🔒 Lock</button>
       <button class="secondary" id="btnClearCheckins" onclick="checkAll(false)">◻️ Clear Check-Ins</button>
@@ -1121,7 +1186,9 @@
     notes: "",
     updatedAt: 0,
     rev: 0,
-    revBy: ""
+    revBy: "",
+    deleted: false,
+    memberDeleted: false
   }));
 
   // Historical archived daily shifts
@@ -2260,6 +2327,92 @@
   }
 
   /* ➕ ADD TEAM MEMBER LOGIC */
+  function closeRemoveMemberModal() {
+    const modal = document.getElementById('removeMemberModal');
+    if (modal) modal.classList.remove('active');
+  }
+
+  function openRemoveMemberModal() {
+    const select = document.getElementById('removeMemberSelect');
+    if (!select) return;
+
+    select.innerHTML = '';
+    const activeMembers = (data || []).filter(function(m) {
+      return !m.deleted;
+    }).sort(function(a, b) {
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+
+    if (!activeMembers.length) {
+      alert('There are no active team members to remove.');
+      return;
+    }
+
+    activeMembers.forEach(function(m) {
+      const option = document.createElement('option');
+      option.value = String(m.id);
+      option.textContent = (m.name || 'Unnamed') + ' — ' + (m.role || '');
+      select.appendChild(option);
+    });
+
+    document.getElementById('removeMemberModal').classList.add('active');
+  }
+
+  function confirmRemoveMember() {
+    const select = document.getElementById('removeMemberSelect');
+    const id = select ? select.value : '';
+    const member = (data || []).find(function(m) {
+      return String(m.id) === String(id) && !m.deleted;
+    });
+
+    if (!member) return;
+
+    const confirmed = confirm(
+      'PERMANENTLY DELETE ' + member.name + '?\\n\\n' +
+      'They will be removed from the active roster. Historical records will be preserved.\\n\\n' +
+      'This action cannot be undone.'
+    );
+    if (!confirmed) return;
+
+    // Preserve an audit/tombstone record so other iPads do not resurrect
+    // the member from an older roster snapshot.
+    const tombstone = Object.assign({}, member, {
+      deleted: true,
+      memberDeleted: true,
+      memberDeletedAt: syncNow(),
+      memberDeletedBy: CLIENT_ID,
+      rev: nextRev(),
+      revBy: CLIENT_ID,
+      updatedAt: syncNow()
+    });
+
+    // Keep the tombstone in memory for sync, but hide it from the active board.
+    const existingIndex = data.findIndex(function(m) {
+      return String(m.id) === String(member.id);
+    });
+    if (existingIndex >= 0) {
+      data[existingIndex] = tombstone;
+    }
+
+    saveState();
+    renderTable();
+    updateKPIs();
+    if (typeof updateTeamCount === 'function') updateTeamCount();
+    closeRemoveMemberModal();
+
+    // Push the deletion through the same real-time sync mechanism used by
+    // normal row edits.
+    pendingBroadcast = true;
+    if (mqttClient && mqttClient.connected) {
+      broadcastChange();
+    }
+
+    if (typeof flashAutoSaveBadge === 'function') {
+      flashAutoSaveBadge('🗑️ Team Member Removed');
+    }
+  }
+
+
   function promptAddTeamMember() {
     const name = prompt("Enter team member's full name:");
     if (!name || !name.trim()) return;
