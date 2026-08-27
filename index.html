@@ -1960,6 +1960,29 @@
     renderTopPerformersPodium();
   }
 
+
+  // Explicitly sync check-in state, including FALSE (uncheck).
+  // A false value is a real user edit and must not be confused with a blank
+  // or stale full-roster snapshot.
+  function publishMemberCheckIn(member) {
+    if (!member || !mqttClient || !mqttClient.connected) return;
+    try {
+      mqttClient.publish(SYNC_TOPIC, JSON.stringify({
+        type: 'member-checkin',
+        clientId: CLIENT_ID,
+        msgId: nextMsgId(),
+        memberId: member.id,
+        memberName: member.name,
+        checkedIn: !!member.checkedIn,
+        rev: member.rev || 0,
+        revBy: member.revBy || CLIENT_ID,
+        updatedAt: member.updatedAt || syncNow()
+      }), { qos: 1, retain: false });
+    } catch (e) {
+      syncWarn('CHECK-IN DELTA PUBLISH FAILED', e);
+    }
+  }
+
   function toggleCheckIn(index) {
     if (currentTab !== 'daily') return;
     const member = data.find(d => d.id === index);
@@ -1971,6 +1994,8 @@
     updateTotals();
     broadcastChange();
     setTimeout(reorderRows, 60);
+  
+    publishMemberCheckIn(member);
   }
 
   function renderCheckInVisual(index) {
@@ -1998,6 +2023,7 @@
     });
     updateTotals();
     broadcastChange();
+    data.forEach(d => publishMemberCheckIn(d));
     setTimeout(reorderRows, 60);
   }
 
@@ -2882,6 +2908,55 @@
           // EXPLICIT ROOM-WIDE MANUAL RESET.
           // This is the ONLY reset command that is allowed to clear today's
           // live board from an MQTT message. It does not touch history.
+          if (msg.type === 'member-checkin') {
+            if (msg.clientId === CLIENT_ID) return;
+            if (isDuplicateMsgId(msg.msgId)) return;
+
+            const member = data.find(d =>
+              String(d.id) === String(msg.memberId) ||
+              (msg.memberName && d.name === msg.memberName)
+            );
+            if (!member) return;
+
+            const remoteRev = Number(msg.rev || 0);
+            const localRev = Number(member.rev || 0);
+            let remoteWins = remoteRev > localRev;
+            if (remoteRev === localRev) {
+              remoteWins = String(msg.revBy || msg.clientId || '') >
+                           String(member.revBy || '');
+            }
+
+            if (remoteWins) {
+              observeRev(remoteRev);
+              observePeerTimestamp(Number(msg.updatedAt || 0));
+              member.checkedIn = !!msg.checkedIn;
+              member.rev = remoteRev;
+              member.revBy = msg.revBy || msg.clientId || '';
+              member.updatedAt = Number(msg.updatedAt || syncNow());
+
+              saveLocalState();
+              renderCheckInVisual(member.id);
+              updateTotals();
+              if (typeof renderTopPerformersPodium === 'function') {
+                renderTopPerformersPodium();
+              }
+              if (typeof scheduleReorder === 'function') {
+                scheduleReorder();
+              }
+              setSyncBadge('🟢 Live Multi-Device Sync Active');
+              if (typeof scheduleReconcilePublish === 'function') {
+                scheduleReconcilePublish();
+              }
+              syncLog('CHECK-IN DELTA APPLIED', {
+                name: member.name,
+                checkedIn: member.checkedIn,
+                rev: member.rev,
+                from: msg.clientId
+              });
+            }
+            return;
+          }
+
           if (msg.type === 'manual-room-reset') {
             const resetDay = String(msg.resetDay || '');
             const resetTs = Number(msg.timestamp || 0);
