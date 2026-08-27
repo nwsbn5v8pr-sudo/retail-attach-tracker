@@ -2893,7 +2893,7 @@
           reconcileTimer = setTimeout(function() {
             reconcileTimer = null;
             pendingBroadcast = false;
-            if (hasPending()) broadcastChange();   // publish MERGED result
+            if (hasPending()) broadcastChange();   // publish ONLY explicit local edits
             setSyncBadge('🟢 Live Multi-Device Sync Active');
           }, RECONCILE_WAIT_MS);
         }
@@ -2908,6 +2908,54 @@
           // EXPLICIT ROOM-WIDE MANUAL RESET.
           // This is the ONLY reset command that is allowed to clear today's
           // live board from an MQTT message. It does not touch history.
+          if (msg.type === 'member-state-delta') {
+            if (msg.clientId === CLIENT_ID) return;
+            if (isDuplicateMsgId(msg.msgId)) return;
+            if (!Array.isArray(msg.changes)) return;
+
+            let changed = false;
+            msg.changes.forEach(change => {
+              const incoming = change && change.member;
+              if (!incoming || !incoming.id) return;
+
+              const local = data.find(d => String(d.id) === String(incoming.id));
+              if (!local) {
+                // Do not create members from arbitrary stale snapshots.
+                return;
+              }
+
+              const remoteRev = Number(incoming.rev || 0);
+              const localRev = Number(local.rev || 0);
+              let remoteWins = remoteRev > localRev;
+              if (remoteRev === localRev) {
+                remoteWins = String(incoming.revBy || msg.clientId || '') >
+                             String(local.revBy || '');
+              }
+
+              if (!remoteWins) return;
+
+              observeRev(remoteRev);
+              observePeerTimestamp(Number(incoming.updatedAt || 0));
+
+              // Replace only this member. Never replace the entire roster.
+              const idx = data.indexOf(local);
+              data[idx] = Object.assign({}, local, incoming);
+              changed = true;
+            });
+
+            if (changed) {
+              saveLocalState();
+              renderTableStructure();
+              updateTotals();
+              if (typeof renderTopPerformersPodium === 'function') {
+                renderTopPerformersPodium();
+              }
+              if (typeof scheduleReorder === 'function') scheduleReorder();
+              setSyncBadge('🟢 Live Multi-Device Sync Active');
+            }
+            return;
+          }
+
           if (msg.type === 'member-checkin') {
             if (msg.clientId === CLIENT_ID) return;
             if (isDuplicateMsgId(msg.msgId)) return;
@@ -2990,316 +3038,65 @@
 
 
           if (topic.endsWith('/req') && msg.clientId !== CLIENT_ID) {
-            observePeerTimestamp(msg.version);
-            // Only answer if we actually hold meaningful state. Previously a
-            // freshly-reloaded device (lastVersion restored from storage but
-            // roster still all zeroes) would reply and push blanks to everyone.
-            if ((stateHydrated || hasAnyActivity(data) || historyRecords.length > 0) && lastVersion > 0) {
-              mqttClient.publish(SYNC_TOPIC, JSON.stringify({
-                clientId: CLIENT_ID,
-                msgId: nextMsgId(),
-                version: lastVersion,
-                data: data,
-                history: historyRecords
-              }), { qos: 1, retain: false });
+            // A reconnecting device requests current state, but peers must NOT
+            // blindly dump full rosters back into the shared state topic.
+            // Full snapshots are the source of stale-device overwrites.
+            // The reconnecting device remains non-authoritative until it
+            // receives explicit current member deltas.
+            syncLog("STATE REQUEST RECEIVED — no full-roster publish", {
+              from: msg.clientId
+            });
+            return;
+          }
+
+
+          if (msg.clientId !== CLIENT_ID && Array.isArray(msg.data)) {
+            // Legacy snapshot compatibility: accept ONLY individual rows whose
+            // revision is newer. Never treat an incoming blank/full snapshot
+            // as authoritative and never replace the local roster wholesale.
+            let changed = false;
+            msg.data.forEach(incoming => {
+              if (!incoming || !incoming.id) return;
+              const local = data.find(d => String(d.id) === String(incoming.id));
+              if (!local) return;
+
+              const rr = Number(incoming.rev || 0);
+              const lr = Number(local.rev || 0);
+              let wins = rr > lr;
+              if (rr === lr) {
+                wins = String(incoming.revBy || msg.clientId || '') >
+                       String(local.revBy || '');
+              }
+              if (!wins) return;
+
+              // Ignore a zero/blank row if it would erase an active local row
+              // and the incoming revision is not a known explicit reset.
+              const incomingBlank =
+                !incoming.checkedIn &&
+                ((incoming.ac||0)+(incoming.upgrade||0)+(incoming.services||0)+
+                 (incoming.biz||0)+(incoming.acc||0)) === 0;
+              const localActive =
+                !!local.checkedIn ||
+                ((local.ac||0)+(local.upgrade||0)+(local.services||0)+
+                 (local.biz||0)+(local.acc||0)) > 0;
+
+              if (incomingBlank && localActive && !msg.dayReset) return;
+
+              const idx=data.indexOf(local);
+              data[idx]=Object.assign({},local,incoming);
+              changed=true;
+            });
+
+            if (changed) {
+              saveLocalState();
+              renderTableStructure();
+              updateTotals();
+              if (typeof renderTopPerformersPodium === 'function') renderTopPerformersPodium();
+              if (typeof scheduleReorder === 'function') scheduleReorder();
             }
             return;
           }
 
-          if (msg.clientId !== CLIENT_ID && msg.data) {
-            // SHAPE VALIDATION. msg.data must be a NON-EMPTY array of member
-            // rows. A malformed or empty payload must never reach the merge:
-            //   * non-array  -> .forEach throws mid-merge, leaving partial state
-            //   * empty array -> looks like "a peer with no activity", which is
-            //     exactly the shape a wipe takes.
-            if (!Array.isArray(msg.data) || msg.data.length === 0) {
-              syncWarn("REJECT malformed/empty data payload", {
-                from: msg.clientId,
-                type: Object.prototype.toString.call(msg.data),
-                length: (msg.data && msg.data.length) || 0
-              });
-              return;
-            }
-            // Every row must at least carry a usable name, or we cannot match
-            // it to a local record and could adopt garbage.
-            const validRows = msg.data.filter(function(r) {
-              return r && typeof r.name === "string" && r.name.length > 0;
-            });
-            if (validRows.length === 0) {
-              syncWarn("REJECT payload with no valid member rows", { from: msg.clientId });
-              return;
-            }
-            if (validRows.length !== msg.data.length) {
-              syncWarn("Dropped malformed member rows", {
-                from: msg.clientId,
-                dropped: msg.data.length - validRows.length
-              });
-              msg.data = validRows;
-            }
-
-            // DUPLICATE GUARD: QoS 1 can redeliver the identical publish.
-            // Same msgId seen before => unconditionally ignore.
-            if (isDuplicateMsgId(msg.msgId)) {
-              syncLog("DROP duplicate msgId", msg.msgId);
-              setSyncBadge('🟢 Live Multi-Device Sync Active');
-              return;
-            }
-
-            // LOOP GUARD: drop payloads we have already processed, so relayed
-            // state cannot ping-pong between devices.
-            const inboundFp = fingerprint(msg);
-            if (isEchoOfSeenInbound(inboundFp)) {
-              syncLog("DROP echo (already-seen payload)", { from: msg.clientId });
-              setSyncBadge('🟢 Live Multi-Device Sync Active');
-              return;
-            }
-            rememberInbound(inboundFp);
-
-            // Per-record merge: only overwrite a team member's fields if the
-            // incoming record is newer than what we have locally for THAT
-            // person. This prevents one device's change from wiping out an
-            // unrelated (or even the same) team member's more recent edit
-            // made on another device — no more "last full snapshot wins".
-            let appliedAnyChange = false;
-            observePeerTimestamp(msg.version);
-
-            // If an incoming snapshot is entirely blank but we hold real data,
-            // ignore its member rows outright. This is the classic eraser: a
-            // reloaded/rolled-over peer broadcasting zeroes stamped with a
-            // fresh (or clock-skewed) timestamp.
-            const remoteHasActivity = hasAnyActivity(msg.data);
-            const localHasActivity = hasAnyActivity(data);
-            // An explicit, DATE-VALIDATED dayReset is a legitimate blank
-            // payload. `acceptDayReset` is computed just below; until it is
-            // proven we treat a blank payload as a wipe attempt.
-            let remoteIsBlankWipe = !remoteHasActivity && localHasActivity;
-
-            // ------------------------------------------------------------
-            // RULE 14: DAILY ROLLOVER IS DATE-DRIVEN, NEVER SYNC-DRIVEN.
-            // A peer's dayReset is only trusted if OUR OWN calendar agrees the
-            // day actually changed (i.e. the date we archived is genuinely in
-            // the past relative to today). Otherwise we ignore the reset
-            // entirely — an MQTT reconnect at 2 PM must never clear the board.
-            let acceptDayReset = false;
-            if (msg.dayReset) {
-              let localLiveDay = null;
-              try { localLiveDay = localStorage.getItem(STORAGE_KEY_LIVE_DAY); } catch(e) {}
-              const todayStr = getTodayString();
-              const archived = msg.archivedDate;
-
-              const archivedIsPast = !!archived && archived < todayStr;
-              const weAlsoRolled = localLiveDay === todayStr;
-              const weStillOnArchivedDay = localLiveDay === archived;
-
-              // Accept only when the archived day is strictly before today AND
-              // our own stamp corroborates it (we are either already on today,
-              // or still sitting on the day the peer just closed).
-              acceptDayReset = archivedIsPast && (weAlsoRolled || weStillOnArchivedDay || !localLiveDay);
-
-              if (acceptDayReset) {
-                syncLog("dayReset ACCEPTED", { archived: archived, today: todayStr, localLiveDay: localLiveDay });
-                try { localStorage.setItem(STORAGE_KEY_LIVE_DAY, todayStr); } catch(e) {}
-              } else {
-                syncWarn("dayReset REJECTED (date does not justify a reset)", {
-                  archived: archived, today: todayStr, localLiveDay: localLiveDay,
-                  from: msg.clientId
-                });
-              }
-            }
-
-            // Only a validated dayReset may pass a blank payload through.
-            if (acceptDayReset) remoteIsBlankWipe = false;
-
-            let mergedCount = 0;
-            let rejectedCount = 0;
-
-            msg.data.forEach(remote => {
-              const remoteTs = remote.updatedAt || 0;
-              observePeerTimestamp(remoteTs);
-              observeRev(remote.rev || 0);
-              let local = data.find(d => d.name === remote.name);
-
-              if (!local) {
-                // Team member exists remotely but not locally yet (e.g. added
-                // via Add Team Member on another device) — adopt them.
-                // GUARDS:
-                //  * never adopt rows out of a payload we already classified as
-                //    a blank wipe (it would inject rows during an erase attempt)
-                //  * only adopt a row that actually carries something (activity
-                //    or a real rev), so corrupt/blank rows cannot pad the roster
-                //  * cap roster growth so a hostile/looping peer cannot grow
-                //    `data` without bound
-                if (remoteIsBlankWipe) { rejectedCount++; return; }
-
-                const remoteRowHasContent = remote.checkedIn ||
-                  ((remote.ac||0) + (remote.upgrade||0) + (remote.services||0) +
-                   (remote.biz||0) + (remote.acc||0)) > 0 ||
-                  (remote.rev || 0) > 0;
-                if (!remoteRowHasContent) { rejectedCount++; return; }
-
-                if (data.length >= MAX_ROSTER_SIZE) {
-                  syncWarn("Refused to adopt member — roster cap reached", {
-                    name: remote.name, cap: MAX_ROSTER_SIZE
-                  });
-                  rejectedCount++;
-                  return;
-                }
-
-                local = Object.assign({}, remote);
-                local.id = data.length > 0 ? Math.max(...data.map(d => d.id)) + 1 : 0;
-                data.push(local);
-                if (!INITIAL_ROSTER.some(m => m.name === local.name)) {
-                  INITIAL_ROSTER.push({ name: local.name, role: local.role });
-                }
-                syncLog("ADOPTED new member from peer", { name: local.name, from: msg.clientId });
-                appliedAnyChange = true;
-                mergedCount++;
-                return;
-              }
-
-              const localTs = local.updatedAt || 0;
-              const localRev = local.rev || 0;
-              const remoteRev = remote.rev || 0;
-
-              // Reject a blanket wipe coming from an unhydrated/rolled-over peer.
-              if (remoteIsBlankWipe) { rejectedCount++; return; }
-
-              // CONFLICT RESOLUTION VIA LOGICAL CLOCK (skew-immune).
-              // A remote row only wins if its logical revision is strictly
-              // higher. Equal revs (concurrent edits) break deterministically
-              // on clientId so every device converges on the same winner.
-              let remoteWins;
-              if (acceptDayReset) {
-                remoteWins = true;                     // validated day boundary
-              } else if (remoteRev !== localRev) {
-                remoteWins = remoteRev > localRev;
-              } else if (remoteRev === 0 && localRev === 0) {
-                // Legacy rows with no rev yet: fall back to wall clock, but
-                // never let a blank remote erase populated local data.
-                const remoteMemberBlank = !remote.checkedIn &&
-                  ((remote.ac||0) + (remote.upgrade||0) + (remote.services||0) + (remote.biz||0) + (remote.acc||0)) === 0;
-                const localMemberHasData = local.checkedIn ||
-                  ((local.ac||0) + (local.upgrade||0) + (local.services||0) + (local.biz||0) + (local.acc||0)) > 0;
-                if (remoteMemberBlank && localMemberHasData) return;
-                remoteWins = remoteTs > localTs;
-              } else {
-                // Same rev from two devices (concurrent edit, or a peer
-                // replaying a stale row at an equal rev). NEVER let an equal-rev
-                // blank row destroy populated data — prefer the side that holds
-                // real values, and only fall back to the deterministic
-                // clientId tie-break when both sides are comparable.
-                const remoteMemberBlank = !remote.checkedIn &&
-                  ((remote.ac||0) + (remote.upgrade||0) + (remote.services||0) + (remote.biz||0) + (remote.acc||0)) === 0;
-                const localMemberHasData = local.checkedIn ||
-                  ((local.ac||0) + (local.upgrade||0) + (local.services||0) + (local.biz||0) + (local.acc||0)) > 0;
-                if (remoteMemberBlank && localMemberHasData) return;
-                remoteWins = String(remote.revBy || "") > String(local.revBy || "");
-              }
-
-              if (remoteWins) {
-                local.checkedIn = remote.checkedIn;
-                local.ac = remote.ac;
-                local.upgrade = remote.upgrade;
-                local.services = remote.services;
-                local.biz = remote.biz;
-                local.acc = remote.acc;
-                local.step = remote.step || "";
-                local.notes = remote.notes;
-                local.updatedAt = remoteTs;
-                local.rev = remoteRev;
-                local.revBy = remote.revBy || "";
-                appliedAnyChange = true;
-                mergedCount++;
-              }
-            });
-
-            if (Array.isArray(msg.history)) {
-              // Merge history by date. NEVER replace the whole array, and never
-              // accept an archived day that is not structurally valid — a bad
-              // record here would silently destroy a completed day, which also
-              // feeds Prior Day / Weekly / Monthly / Quarterly.
-              msg.history.forEach(remoteRec => {
-                if (!remoteRec || typeof remoteRec.date !== "string" || !remoteRec.date) {
-                  syncWarn("Skipped history record with no valid date", { from: msg.clientId });
-                  return;
-                }
-                if (!Array.isArray(remoteRec.data) || remoteRec.data.length === 0) {
-                  syncWarn("Skipped history record with malformed/empty data", {
-                    date: remoteRec.date, from: msg.clientId
-                  });
-                  return;
-                }
-
-                const idx = historyRecords.findIndex(r => r.date === remoteRec.date);
-                if (idx === -1) {
-                  if (historyRecords.length >= MAX_HISTORY_DAYS) {
-                    syncWarn("History cap reached — not adding remote day", {
-                      date: remoteRec.date, cap: MAX_HISTORY_DAYS
-                    });
-                    return;
-                  }
-                  historyRecords.push(remoteRec);
-                  appliedAnyChange = true;
-                } else if ((remoteRec.timestamp || 0) > (historyRecords[idx].timestamp || 0)) {
-                  // Newer archive of the SAME day. Only accept it if it is not
-                  // emptier than what we already hold, so a stripped-down
-                  // rebroadcast cannot hollow out a good archived day.
-                  const existing = historyRecords[idx];
-                  const existingActive = hasAnyActivity(existing.data || []);
-                  const incomingActive = hasAnyActivity(remoteRec.data);
-                  if (existingActive && !incomingActive) {
-                    syncWarn("Refused to replace archived day with an empty one", {
-                      date: remoteRec.date, from: msg.clientId
-                    });
-                    rejectedCount++;
-                    return;
-                  }
-                  historyRecords[idx] = remoteRec;
-                  appliedAnyChange = true;
-                }
-              });
-            }
-
-            // The global `version` is bookkeeping ONLY — it must never decide
-            // whether records get processed. A message with a HIGHER global
-            // version can still contain OLDER individual records (e.g. a peer
-            // rebroadcasting a stale row it never updated), and a message with
-            // a LOWER global version can contain a NEWER record for one member.
-            // Authority therefore lives at the record level (Lamport `rev`,
-            // handled per-member above). We only track the max version seen so
-            // our own future publishes stay monotonically ordered.
-            if (msg.version && msg.version > lastVersion) {
-              lastVersion = msg.version;
-            }
-
-            syncLog("MERGE", { from: msg.clientId, applied: mergedCount,
-                               rejected: rejectedCount, blankWipeBlocked: remoteIsBlankWipe,
-                               dayResetAccepted: acceptDayReset });
-
-            if (appliedAnyChange) {
-              stateHydrated = true;
-              // Persist the merged state immediately, then schedule ONE
-              // reconciliation publish. Older versions intentionally never
-              // rebroadcast a received merge; that prevented loops, but it
-              // also meant an offline iPad could remain stale indefinitely.
-              // Lamport revs + inbound fingerprint guards make this safe: a
-              // peer receiving the same merged snapshot has nothing newer to
-              // apply and will not keep rebroadcasting it.
-              saveLocalState();
-              scheduleReconcilePublish();
-              if (currentTab === 'daily') {
-                updateTotals();
-                reorderRows();
-              } else if (currentTab === 'history') {
-                renderHistoryList();
-              } else {
-                renderTableStructure();
-                updateTotals();
-                reorderRows();
-              }
-            }
-            setSyncBadge('🟢 Live Multi-Device Sync Active');
-          }
         } catch(err) {}
       });
 
@@ -3351,57 +3148,61 @@
   }
 
   function broadcastChange() {
-    lastVersion = syncNow();
-    // LOCAL FIRST, ALWAYS. The local cache is written before any network work
-    // and its success is completely independent of MQTT. A publish failure
-    // below can never undo, skip, or corrupt this save.
+    // CRITICAL MULTI-IPAD RULE:
+    // A device may NEVER publish its entire local roster merely because it
+    // connected/reconnected. Its localStorage may be stale. Only explicit
+    // user changes are allowed to leave this device as deltas.
     saveLocalState();
 
-    // SAFETY GATE: never publish a roster that has no activity while we also
-    // have no hydrated state. That combination only happens on a fresh/reloaded
-    // device before it has caught up, and publishing it overwrites live data on
-    // every other iPad. Local save above still happened, so nothing is lost.
-    if (!stateHydrated && !hasAnyActivity(data) && historyRecords.length === 0) {
-      syncWarn("BLOCKED publish of empty/unhydrated state (this is the eraser guard)");
+    if (!mqttClient || !mqttClient.connected) {
       pendingBroadcast = true;
       return;
     }
-    if (mqttClient && mqttClient.connected) {
-      try {
-        // NOTE: retain is deliberately FALSE. Using retained messages meant the
-        // broker replayed an old full snapshot to every device that connected or
-        // briefly dropped Wi-Fi — which overwrote good current data with stale
-        // data and is what made whole days appear to erase themselves.
-        const envelope = {
-          clientId: CLIENT_ID,
-          msgId: nextMsgId(),
-          version: lastVersion,
-          data: data,
-          history: historyRecords
-        };
-        const fp = fingerprint(envelope);
 
-        // LOOP GUARD: never send a byte-identical payload twice in a row.
-        if (fp && fp === lastOutboundFingerprint) {
-          syncLog("SKIP publish (identical to previous payload)");
-          pendingBroadcast = false;
-          return;
+    try {
+      const changes = [];
+      data.forEach(member => {
+        if (pendingMembers.has(member.id)) {
+          changes.push({
+            memberId: member.id,
+            member: member
+          });
         }
+      });
 
-        mqttClient.publish(SYNC_TOPIC, JSON.stringify(envelope), { qos: 1, retain: false });
-        syncLog("PUBLISH", { msgId: envelope.msgId, pendingCleared: pendingMembers.size });
-        lastOutboundFingerprint = fp;
-        clearPending();   // our work is on the wire
+      if (!changes.length) {
         pendingBroadcast = false;
-      } catch(e) {
-        pendingBroadcast = true;
+        return;
       }
-    } else {
-      // Offline: remember that we owe the room an update, and send it as soon
-      // as we reconnect rather than losing the edit entirely.
+
+      const envelope = {
+        type: 'member-state-delta',
+        clientId: CLIENT_ID,
+        msgId: nextMsgId(),
+        version: nextVersion(),
+        changes: changes,
+        history: [] // Never send local history as part of a normal edit.
+      };
+
+      mqttClient.publish(
+        SYNC_TOPIC,
+        JSON.stringify(envelope),
+        { qos: 1, retain: false }
+      );
+
+      clearPending();
+      pendingBroadcast = false;
+      lastOutboundFingerprint = fingerprint(envelope);
+      syncLog("PUBLISH DELTAS", {
+        msgId: envelope.msgId,
+        changes: changes.length
+      });
+    } catch (e) {
       pendingBroadcast = true;
+      syncWarn("DELTA PUBLISH FAILED", e);
     }
   }
+
 
   // Explicit, intentional day-boundary reset. Flagged so receivers apply it
   // even though the payload is "blank" (which the eraser guard would reject).
