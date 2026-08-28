@@ -2672,7 +2672,34 @@
     const todayStr = getTodayString();
 
     if (!liveDay) {
-      // First run ever on this device — just stamp today, nothing to roll over.
+      // No day marker can happen after an upgrade or storage cleanup. If the
+      // restored live board contains activity, preserve it rather than
+      // silently treating it as a brand-new empty day.
+      if (hasAnyActivity(data) && stateHydrated) {
+        const inferredDate = getTodayString();
+        saveCurrentDay(true, inferredDate);
+        const initTs = syncNow();
+        data.forEach(function(d) {
+          d.checkedIn = false;
+          d.ac = 0;
+          d.upgrade = 0;
+          d.services = 0;
+          d.biz = 0;
+          d.acc = 0;
+          d.step = "";
+          d.notes = "";
+          d.updatedAt = initTs;
+          d.rev = nextRev();
+          d.revBy = CLIENT_ID;
+        });
+        try { localStorage.setItem(STORAGE_KEY_LIVE_DAY, todayStr); } catch(e) {}
+        lastVersion = initTs;
+        saveLocalState();
+        broadcastDayReset(initTs, inferredDate);
+        return true;
+      }
+
+      // First run ever on this device with no activity.
       try { localStorage.setItem(STORAGE_KEY_LIVE_DAY, todayStr); } catch(e) {}
       return false;
     }
@@ -3062,6 +3089,99 @@
           // EXPLICIT ROOM-WIDE MANUAL RESET.
           // This is the ONLY reset command that is allowed to clear today's
           // live board from an MQTT message. It does not touch history.
+          // AUTOMATIC CALENDAR-DAY RESET.
+          // This is different from an ordinary member delta: the new day must
+          // clear the live board even when a remote member has a higher Lamport
+          // revision than the device that crossed midnight. Otherwise the old
+          // day's values can survive indefinitely on some iPads.
+          if (msg.type === 'automatic-day-reset' || (msg.dayReset && msg.type !== 'manual-room-reset')) {
+            if (msg.clientId === CLIENT_ID) return;
+            if (isDuplicateMsgId(msg.msgId)) return;
+
+            const resetDay = String(msg.resetDay || getTodayString());
+            const archivedDate = String(msg.archivedDate || '');
+
+            // Only apply a calendar rollover when the message is for TODAY.
+            // This prevents a delayed packet from a prior day from wiping a
+            // current shift.
+            if (resetDay !== getTodayString()) {
+              syncLog("AUTOMATIC DAY RESET IGNORED — STALE DATE", {
+                resetDay: resetDay,
+                today: getTodayString(),
+                from: msg.clientId
+              });
+              return;
+            }
+
+            let localDay = null;
+            try { localDay = localStorage.getItem(STORAGE_KEY_LIVE_DAY); } catch (e) {}
+
+            // If this device still owns the archived day and has activity,
+            // preserve that day's local copy before clearing the live board.
+            if (archivedDate && localDay === archivedDate && hasAnyActivity(data)) {
+              saveCurrentDay(true, archivedDate);
+            }
+
+            const resetTs = Number(msg.timestamp || msg.version || syncNow());
+
+            data.forEach(function(d) {
+              d.checkedIn = false;
+              d.ac = 0;
+              d.upgrade = 0;
+              d.services = 0;
+              d.biz = 0;
+              d.acc = 0;
+              d.step = "";
+              d.notes = "";
+              d.updatedAt = Math.max(Number(d.updatedAt || 0), resetTs);
+              d.rev = nextRev();
+              d.revBy = msg.clientId || 'remote';
+            });
+
+            // Keep history intact. Merge the sender's history only by date so
+            // the archived day is available even on an iPad that was offline
+            // at the rollover moment.
+            if (Array.isArray(msg.history)) {
+              msg.history.forEach(function(incomingHistory) {
+                if (!incomingHistory || !incomingHistory.date || !Array.isArray(incomingHistory.data)) return;
+                const idx = historyRecords.findIndex(function(r) {
+                  return r.date === incomingHistory.date;
+                });
+                if (idx < 0) {
+                  historyRecords.push(JSON.parse(JSON.stringify(incomingHistory)));
+                } else if (Number(incomingHistory.timestamp || 0) > Number(historyRecords[idx].timestamp || 0)) {
+                  historyRecords[idx] = JSON.parse(JSON.stringify(incomingHistory));
+                }
+              });
+              historyRecords.sort(function(a, b) {
+                return parseDateSafe(b.date) - parseDateSafe(a.date);
+              });
+              if (historyRecords.length > MAX_HISTORY_DAYS) {
+                historyRecords = historyRecords.slice(0, MAX_HISTORY_DAYS);
+              }
+            }
+
+            try { localStorage.setItem(STORAGE_KEY_LIVE_DAY, resetDay); } catch (e) {}
+            lastVersion = Math.max(Number(lastVersion || 0), resetTs);
+            clearPending();
+            pendingBroadcast = false;
+            lastOutboundFingerprint = '';
+
+            saveLocalState();
+            renderTableStructure();
+            updateTotals();
+            if (typeof renderTopPerformersPodium === 'function') renderTopPerformersPodium();
+            if (typeof scheduleReorder === 'function') scheduleReorder();
+
+            flashAutoSaveBadge(`🌅 New Day — ${archivedDate || 'Previous Day'} Archived`);
+            syncLog("AUTOMATIC DAY RESET APPLIED", {
+              archivedDate: archivedDate,
+              newDay: resetDay,
+              from: msg.clientId
+            });
+            return;
+          }
+
           if (msg.type === 'member-state-delta') {
             if (msg.clientId === CLIENT_ID) return;
             if (isDuplicateMsgId(msg.msgId)) return;
@@ -3366,11 +3486,14 @@
     if (mqttClient && mqttClient.connected) {
       try {
         mqttClient.publish(SYNC_TOPIC, JSON.stringify({
+          type: 'automatic-day-reset',
           clientId: CLIENT_ID,
           msgId: nextMsgId(),
           version: ts,
           dayReset: true,
           archivedDate: archivedDate,
+          resetDay: getTodayString(),
+          timestamp: ts,
           data: data,
           history: historyRecords
         }), { qos: 1, retain: false });
