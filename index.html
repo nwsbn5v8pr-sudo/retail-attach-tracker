@@ -3708,34 +3708,101 @@
   }
 
   async function supabaseResetDay() {
-    if (!supabaseReady) {
+    if (!supabaseReady || !supabaseClient) {
       alert('Cloud sync is not connected. Reset Day was not applied.');
       return false;
     }
-    const {error} = await supabaseClient.rpc('gb_tracker_reset_day', {
-      p_client_id: CLIENT_ID
-    });
-    if (error) {
-      syncWarn('SUPABASE RESET FAILED', error);
-      alert('Cloud Reset Day failed. No devices were reset.');
+
+    const resetTs = Date.now();
+    const today = getTodayString();
+
+    try {
+      // IMPORTANT: do not depend on a custom Supabase RPC here. The previous
+      // version called gb_tracker_reset_day(), but that function is not present
+      // in the project, which caused "Cloud Reset Day failed".
+      //
+      // First archive today's live board so Reset Day never destroys today's
+      // history.
+      const snapshot = {
+        date: today,
+        timestamp: resetTs,
+        data: JSON.parse(JSON.stringify(data))
+      };
+      await saveHistoryToSupabase(snapshot);
+
+      // Reset every live member directly in the central table. Realtime
+      // subscriptions on gb_tracker_members then deliver the cleared rows to
+      // every connected iPad.
+      const resetRevision = Math.max(Number(lastVersion || 0), resetTs);
+
+      const { data: resetRows, error: resetError } = await supabaseClient
+        .from('gb_tracker_members')
+        .update({
+          checked_in: false,
+          ac: 0,
+          upgrade: 0,
+          services: 0,
+          biz: 0,
+          acc: 0,
+          step: '',
+          notes: '',
+          revision: resetRevision,
+          updated_by: CLIENT_ID
+        })
+        .eq('removed', false)
+        .select('*');
+
+      if (resetError) {
+        syncWarn('SUPABASE RESET FAILED', resetError);
+        alert('Cloud Reset Day failed: ' + (resetError.message || 'database update failed'));
+        return false;
+      }
+
+      if (!Array.isArray(resetRows) || resetRows.length === 0) {
+        syncWarn('SUPABASE RESET FAILED', 'No active member rows were updated');
+        alert('Cloud Reset Day failed: no active devices/members were found.');
+        return false;
+      }
+
+      // Apply the authoritative cleared rows locally as well. This guarantees
+      // the initiating iPad resets even if its realtime subscription is delayed.
+      data = resetRows.map(dbRowToMember);
+      data.forEach(observeRev);
+
+      lastVersion = resetRevision;
+      try {
+        localStorage.setItem('pz_room_reset_day', today);
+        localStorage.setItem('pz_room_reset_ts', String(resetTs));
+        localStorage.setItem('pz_room_reset_id',
+          CLIENT_ID + '_dbreset_' + resetTs);
+        localStorage.setItem(STORAGE_KEY_LIVE_DAY, today);
+      } catch(e) {}
+
+      clearPending();
+      pendingBroadcast = false;
+      lastOutboundFingerprint = '';
+
+      saveLocalState();
+      renderTableStructure();
+      updateTotals();
+      reorderRows();
+      if (typeof renderTopPerformersPodium === 'function') {
+        renderTopPerformersPodium();
+      }
+
+      setSyncBadge(`🧹 Cloud Reset — ${resetRows.length} members cleared`);
+      syncLog('SUPABASE RESET SUCCESS', {
+        date: today,
+        rowsReset: resetRows.length,
+        historyPreserved: true,
+        resetBy: CLIENT_ID
+      });
+      return true;
+    } catch (e) {
+      syncWarn('SUPABASE RESET EXCEPTION', e && e.message ? e.message : e);
+      alert('Cloud Reset Day failed: ' + (e && e.message ? e.message : 'unexpected error'));
       return false;
     }
-
-    // Re-read the authoritative database state so this iPad matches everyone.
-    await supabaseFetchLive();
-    try {
-      localStorage.setItem('pz_room_reset_day', getTodayString());
-      localStorage.setItem('pz_room_reset_ts', String(Date.now()));
-      localStorage.setItem('pz_room_reset_id', CLIENT_ID + '_dbreset_' + Date.now());
-    } catch(e) {}
-    clearPending();
-    pendingBroadcast = false;
-    saveLocalState();
-    renderTableStructure();
-    updateTotals();
-    reorderRows();
-    setSyncBadge('🧹 Live Day Reset Across Store');
-    return true;
   }
 
   async function loadSupabaseHistory() {
