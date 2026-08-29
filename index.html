@@ -144,6 +144,41 @@
     cursor: not-allowed;
   }
 
+  .more-menu-wrap { position: relative; }
+  .more-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    min-width: 190px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    padding: 6px;
+    box-shadow: 0 12px 30px rgba(0,0,0,.18);
+    z-index: 1000;
+  }
+  .more-menu.open { display: flex; flex-direction: column; gap: 4px; }
+  .more-menu button {
+    width: 100%;
+    justify-content: flex-start;
+    background: transparent;
+    color: var(--text-primary);
+    border: none;
+    min-height: 38px;
+    padding: 8px 10px;
+    border-radius: 8px;
+  }
+  .more-menu button:active { background: var(--bg-primary); }
+  .more-menu button.menu-danger { color: #ff453a; }
+  @media (max-width: 800px) {
+    .top-bar .btn-group { width: 100%; gap: 6px; }
+    .top-bar .btn-group > button { flex: 0 0 auto; }
+    .daily-live-btn { order: 3; }
+    .more-menu-wrap { order: 4; }
+  }
+
+
   /* Segmented Navigation Tabs */
   .timeframe-nav {
     display: flex;
@@ -573,7 +608,10 @@
   .notes-input {
     width: 100%;
     min-width: 130px;
+    min-height: 32px;
     height: 32px;
+    max-height: 120px;
+    resize: none;
     padding: 0 8px;
     font-size: 12px;
     border: 1px solid transparent;
@@ -588,6 +626,20 @@
     background: var(--bg-primary);
     border-radius: 6px;
     color: var(--text-primary);
+  }
+  .notes-input.note-editing {
+    min-height: 44px;
+    height: 44px;
+    max-height: 120px;
+    position: relative;
+    z-index: 100;
+    overflow-y: auto;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  @media (max-width: 800px) {
+    body.note-keyboard-open { padding-bottom: 45vh; }
+    body.note-keyboard-open .table-wrapper { max-height: 45vh; }
   }
 
   tfoot td {
@@ -844,31 +896,19 @@
       <button class="secondary" id="btnAddMember" onclick="promptAddTeamMember()" title="Add new team member">➕ Add Team Member</button>
       <button class="danger" id="btnRemoveMember" onclick="openRemoveMemberModal()" title="Permanently remove team member">➖ Remove Team Member</button>
       <button class="undo-btn" id="btnUndo" onclick="undoLastAction()" title="Undo last change">↩️ Undo</button>
-      <button class="secondary" id="btnLock" onclick="lockDeviceNow()" title="Lock this iPad with store PIN">🔒 Lock</button>
-      <button class="secondary" id="btnClearCheckins" onclick="checkAll(false)">◻️ Clear Check-Ins</button>
-      <button class="secondary" onclick="exportCSV()">📥 Export CSV</button>
-      <button class="danger" id="btnReset" onclick="resetCounts()">🔄 Reset Day</button>
+      <button class="secondary daily-live-btn" id="btnDailyLive" onclick="switchTab('daily')" title="Return to today's live tracker">📅 Daily (Live)</button>
+      <div class="more-menu-wrap">
+        <button class="secondary more-menu-btn" type="button" onclick="toggleMoreMenu(event)" aria-haspopup="true" aria-expanded="false">⋯ More</button>
+        <div class="more-menu" id="moreMenu">
+          <button type="button" onclick="lockDeviceNow();closeMoreMenu()">🔒 Lock</button>
+          <button type="button" onclick="checkAll(false);closeMoreMenu()">◻️ Clear Check-Ins</button>
+          <button type="button" onclick="exportCSV();closeMoreMenu()">📥 Export CSV</button>
+          <button type="button" class="menu-danger" onclick="resetCounts();closeMoreMenu()">🔄 Reset Day</button>
+        </div>
+      </div>
     </div>
   </div>
-
-  <!-- Timeframe Navigation Tabs -->
-  <div class="timeframe-nav">
-    <div class="segmented-control">
-      <button class="tab-btn active" id="tab-daily" onclick="switchTab('daily')">📅 Daily (Live)</button>
-      <button class="tab-btn" id="tab-priorday" onclick="switchTab('priorday')">⏮️ Prior Day</button>
-      <button class="tab-btn" id="tab-weekly" onclick="switchTab('weekly')">📊 Weekly</button>
-      <button class="tab-btn" id="tab-monthly" onclick="switchTab('monthly')">🗓️ Monthly</button>
-      <button class="tab-btn" id="tab-quarterly" onclick="switchTab('quarterly')">📈 Quarterly</button>
-      <button class="tab-btn" id="tab-history" onclick="switchTab('history')">📜 History Logs</button>
-    </div>
-    <div class="timeframe-controls">
-      <select id="periodSelector" class="period-selector" style="display: none;" onchange="onPeriodChange()">
-        <!-- Populated dynamically based on selected tab -->
-      </select>
-    </div>
-  </div>
-
-  <!-- Top Performers Podium Section -->
+<!-- Top Performers Podium Section -->
   <div class="top-performers-card" id="topPerformersSection">
     <div class="top-performers-header">
       <div class="top-performers-title">
@@ -1202,6 +1242,24 @@
   let lastManualResetId = '';
   let lastManualResetTs = 0;
 
+
+  function toggleMoreMenu(event) {
+    if (event) event.stopPropagation();
+    const menu = document.getElementById('moreMenu');
+    const btn = document.querySelector('.more-menu-btn');
+    if (!menu) return;
+    const open = menu.classList.toggle('open');
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  function closeMoreMenu() {
+    const menu = document.getElementById('moreMenu');
+    const btn = document.querySelector('.more-menu-btn');
+    if (menu) menu.classList.remove('open');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.more-menu-wrap')) closeMoreMenu();
+  });
 
   // ------------------------------------------------------------------
   // DEFENSIVE SYNC LOGGING
@@ -1954,7 +2012,7 @@
           </select>
         </td>
         <td>
-          <input class="notes-input" id="notes-${p.id}" type="text" placeholder="Add note / focus..." value="${escapeHtml(p.notes || '')}" onclick="event.stopPropagation()" oninput="saveNote(${p.id}, this.value)">
+          <textarea class="notes-input" id="notes-${p.id}" type="text" placeholder="Add note / focus..." value="${escapeHtml(p.notes || '')}" onclick="event.stopPropagation()" oninput="saveNote(${p.id}, this.value)" rows="1"></textarea>
         </td>
       `;
     } else if (isPrior) {
@@ -2011,7 +2069,13 @@
     return tr;
   }
 
+  function isEditingNote() {
+    const el = document.activeElement;
+    return !!(el && el.classList && el.classList.contains('notes-input'));
+  }
+
   function renderTableStructure() {
+    if (isEditingNote()) return;
     const tbody = document.getElementById('tableBody');
     if (!tbody) return;
     tbody.innerHTML = '';
@@ -2096,6 +2160,7 @@
   }
 
   function reorderRows() {
+    if (isEditingNote()) return;
     const tbody = document.getElementById('tableBody');
     const list = getDisplayList();
     if (!tbody || list.length === 0) return;
@@ -2215,6 +2280,24 @@
     const noteInput = document.getElementById(`notes-${i}`);
     if (noteInput && document.activeElement !== noteInput && noteInput.value !== member.notes) {
       noteInput.value = member.notes;
+    }
+    if (noteInput && !noteInput.dataset.noteHandlers) {
+      noteInput.dataset.noteHandlers = '1';
+      noteInput.addEventListener('focus', function() {
+        this.classList.add('note-editing');
+        document.body.classList.add('note-keyboard-open');
+        setTimeout(() => {
+          try { this.scrollIntoView({behavior:'smooth', block:'center', inline:'nearest'}); } catch(e) {}
+        }, 120);
+      });
+      noteInput.addEventListener('blur', function() {
+        this.classList.remove('note-editing');
+        document.body.classList.remove('note-keyboard-open');
+        saveNote(i, this.value);
+      });
+      noteInput.addEventListener('keydown', function(ev) {
+        if (ev.key === 'Enter') ev.stopPropagation();
+      });
     }
 
     const elSlam = document.getElementById(`val-slam-${i}`);
