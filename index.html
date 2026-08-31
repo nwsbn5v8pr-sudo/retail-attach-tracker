@@ -1307,7 +1307,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
             // Member was added dynamically (via Add Team Member) in a prior session
             // and is missing from the static roster after reload — recreate them
             // instead of silently dropping their saved metrics.
-            const newId = data.length > 0 ? Math.max(...data.map(d => d.id)) + 1 : 0;
+            const newId = 'pz_' + trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_' + Date.now();
             target = {
               id: savedItem.id !== undefined && !data.some(d => d.id === savedItem.id) ? savedItem.id : newId,
               name: displayMemberName(savedItem.name),
@@ -2286,60 +2286,48 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     document.getElementById('removeMemberModal').classList.add('active');
   }
 
-  function confirmRemoveMember() {
-    const select = document.getElementById('removeMemberSelect');
-    const id = select ? select.value : '';
-    const member = (data || []).find(function(m) {
-      return String(m.id) === String(id) && !m.deleted;
-    });
+  async function confirmRemoveMember() {
+    const select=document.getElementById('removeMemberSelect');
+    const id=select ? select.value : '';
+    const member=(data||[]).find(function(m){ return String(m.id)===String(id) && !m.deleted; });
+    if(!member) return;
 
-    if (!member) return;
+    if(!confirm('PERMANENTLY DELETE '+member.name+'?\n\nThey will be removed from the active roster.\n\nThis cannot be undone.')) return;
 
-    const confirmed = confirm(
-      'PERMANENTLY DELETE ' + member.name + '?\\n\\n' +
-      'They will be removed from the active roster. Historical records will be preserved.\\n\\n' +
-      'This action cannot be undone.'
-    );
-    if (!confirmed) return;
+    pushUndoSnapshot();
 
-    // Preserve an audit/tombstone record so other iPads do not resurrect
-    // the member from an older roster snapshot.
-    const tombstone = Object.assign({}, member, {
-      deleted: true,
-      memberDeleted: true,
-      memberDeletedAt: syncNow(),
-      memberDeletedBy: CLIENT_ID,
-      rev: nextRev(),
-      revBy: CLIENT_ID,
-      updatedAt: syncNow()
-    });
-
-    // Keep the tombstone in memory for sync, but hide it from the active board.
-    const existingIndex = data.findIndex(function(m) {
-      return String(m.id) === String(member.id);
-    });
-    if (existingIndex >= 0) {
-      data[existingIndex] = tombstone;
-    }
-
-    saveState();
-    renderTable();
-    updateKPIs();
-    if (typeof updateTeamCount === 'function') updateTeamCount();
+    // Remove immediately on this device.
+    data=data.filter(function(m){ return String(m.id)!==String(member.id); });
+    saveLocalState();
+    renderTableStructure();
+    updateTotals();
+    if(typeof updateTeamCount==='function') updateTeamCount();
     closeRemoveMemberModal();
 
-    // Push the deletion through the same real-time sync mechanism used by
-    // normal row edits.
-    pendingBroadcast = true;
-    if (mqttClient && mqttClient.connected) {
-      broadcastChange();
+    // Soft-delete in Supabase so every other iPad receives the removal.
+    if(typeof supabaseClient!=='undefined' && supabaseClient && supabaseReady) {
+      try {
+        const result=await supabaseClient.from(PZ_MEMBERS_TABLE)
+          .update({
+            removed:true,
+            revision:Date.now(),
+            updated_at:new Date().toISOString(),
+            updated_by:CLIENT_ID
+          })
+          .eq('id',String(member.id));
+        if(result.error) throw result.error;
+        setSyncBadge('🟢 PZ Cloud Sync Active');
+      } catch(e) {
+        console.error('PZ remove-member cloud write failed',e);
+        alert('The member was removed on this iPad, but the cloud removal failed: '+(e.message||e));
+        setSyncBadge('🔴 PZ Cloud Sync Failed');
+      }
+    } else {
+      alert('The member was removed on this iPad, but PZ Cloud Sync is not connected.');
     }
 
-    if (typeof flashAutoSaveBadge === 'function') {
-      flashAutoSaveBadge('🗑️ Team Member Removed');
-    }
+    if(typeof flashAutoSaveBadge==='function') flashAutoSaveBadge('🗑️ Team Member Removed');
   }
-
 
   function promptAddTeamMember() {
     const name = prompt("Enter team member's full name:");
@@ -2409,6 +2397,11 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     lastVersion = Date.now();
     saveLocalState();
     broadcastChange();
+    if (typeof supabaseAddMember === 'function') {
+      supabaseAddMember(newMember).then(function(saved) {
+        if (!saved) console.error('PZ add-member cloud write failed');
+      });
+    }
 
     renderTableStructure();
     updateTotals();
@@ -3532,19 +3525,26 @@ async function pzHydrate(){
   saveLocalState(); renderTableStructure(); updateTotals(); reorderRows();
 }
 function pzApply(row){
-  if(!row||row.removed)return;
-  const incoming=pzFromCloud(row);
-  const i=data.findIndex(m=>String(m.id)===String(incoming.id));
-  if(i<0) data.push(incoming);
-  else if(Number(incoming.rev)>=Number(data[i].rev||0)) data[i]=incoming;
+  if(!row) return;
+  const id=String(row.id);
+  if(row.removed){
+    data=data.filter(function(m){ return String(m.id)!==id; });
+  } else {
+    const incoming=pzFromCloud(row);
+    const i=data.findIndex(function(m){ return String(m.id)===id; });
+    if(i<0) data.push(incoming);
+    else if(Number(incoming.rev)>=Number(data[i].rev||0)) data[i]=incoming;
+  }
   data=pzUnique(data);
   saveLocalState();
-  requestAnimationFrame(()=>{
+  requestAnimationFrame(function(){
     renderTableStructure();
     updateTotals();
     reorderRows();
+    if(typeof updateTeamCount==='function') updateTeamCount();
   });
 }
+
 function pzWrite(member,patch){
   if(!supabaseReady) return Promise.reject(new Error("PZ Cloud Sync is not connected"));
   const payload=pzCloudRow(member,patch);
