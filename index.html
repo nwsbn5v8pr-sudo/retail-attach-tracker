@@ -1953,6 +1953,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     setTimeout(reorderRows, 60);
   
     publishMemberCheckIn(member);
+    supabaseSaveMemberPatch(member, {checkedIn: member.checkedIn});
   }
 
   function renderCheckInVisual(index) {
@@ -2057,6 +2058,8 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     updateTotals();
     broadcastChange();
     renderTopPerformersPodium();
+    // Persist this exact metric change to the shared PZ cloud.
+    supabaseIncrement(member, metric, delta);
   }
 
   function saveStep(index, val) {
@@ -2070,6 +2073,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     if (currentSort.column === 'step') {
       setTimeout(reorderRows, 60);
     }
+    supabaseSaveMemberPatch(member, {step: val});
   }
 
   function saveNote(index, val) {
@@ -2079,6 +2083,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     member.notes = val;
     stampEdit(member);
     broadcastChange();
+    supabaseSaveMemberPatch(member, {notes: val});
   }
 
   function renderRow(i) {
@@ -3472,7 +3477,7 @@ let supabaseClient=null, supabaseReady=false, cloudChannel=null, cloudQueue=Prom
 function pzCloudRow(m, patch={}) {
   return Object.assign({
     id:String(m.id), name:String(m.name||""), role:String(m.role||"Specialist"),
-    checked_in:!!m.checkedIn, ac:Number(m.ac||0), pz:Number(m.pz||m.upgrade||0),
+    checked_in:!!m.checkedIn, ac:Number(m.ac||0), pz:Number(m.pz||m.upgrade||0), services:Number(m.services||0),
     biz:Number(m.biz||0), acc:Number(m.acc||0), step:String(m.step||""),
     notes:String(m.notes||""), revision:Math.max(Date.now(),Number(m.rev||0)+1),
     updated_at:new Date().toISOString(), updated_by:CLIENT_ID, removed:false,
@@ -3481,7 +3486,7 @@ function pzCloudRow(m, patch={}) {
 }
 function pzFromCloud(r){
   return {id:String(r.id),name:r.name||"",role:r.role||"Specialist",checkedIn:!!r.checked_in,
-    ac:Number(r.ac||0),pz:Number(r.pz||0),upgrade:Number(r.pz||0),biz:Number(r.biz||0),
+    ac:Number(r.ac||0),pz:Number(r.pz||0),upgrade:Number(r.pz||0),services:Number(r.services||0),biz:Number(r.biz||0),
     acc:Number(r.acc||0),step:r.step||"",notes:r.notes||"",rev:Number(r.revision||0),
     revBy:r.updated_by||"",updatedAt:r.updated_at?new Date(r.updated_at).getTime():Date.now()};
 }
@@ -3499,7 +3504,7 @@ async function pzCloudLoad(){
   if(error)throw error;
   if(rows&&rows.length)return pzUnique(rows.map(pzFromCloud));
   const seed=roster.map((m,i)=>({id:"pz_"+i,name:m.name,role:m.role||"Specialist",
-    checked_in:false,ac:0,pz:0,biz:0,acc:0,step:"",notes:"",revision:0,
+    checked_in:false,ac:0,pz:0,services:0,biz:0,acc:0,step:"",notes:"",revision:0,
     updated_at:new Date().toISOString(),updated_by:CLIENT_ID,removed:false,shift_date:getTodayString()}));
   const {data:seeded,error:se}=await supabaseClient.from(PZ_MEMBERS_TABLE).upsert(seed,{onConflict:"id"}).select("*");
   if(se)throw se;
