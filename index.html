@@ -96,6 +96,14 @@ async function initSupabase() {
     }, PZ_AUTH_INTERVAL_MS);
   }
 
+  function pzLockNow() {
+    try {
+      sessionStorage.removeItem(PZ_AUTH_KEY);
+      sessionStorage.removeItem(PZ_AUTH_TIME_KEY);
+    } catch (e) {}
+    pzShowPasswordGate();
+  }
+
   function pzEnforcePassword() {
     if (!pzIsAuthenticated()) pzShowPasswordGate();
   }
@@ -867,6 +875,7 @@ async function initSupabase() {
         <div class="more-menu" id="moreMenu">
           <button type="button" onclick="checkAll(false);closeMoreMenu()">◻️ Clear Check-Ins</button>
           <button type="button" onclick="exportCSV();closeMoreMenu()">📥 Export CSV</button>
+          <button type="button" onclick="pzLockNow();closeMoreMenu()">🔒 Lock</button>
           <button type="button" class="menu-danger" onclick="resetCounts();closeMoreMenu()">🔄 Reset Day</button>
         </div>
       </div>
