@@ -6,6 +6,7 @@
 <title>🛍️PZ Focus & Follow 🆙</title>
 <!-- Lightweight MQTT over WebSockets for Instant Serverless Cloud Sync -->
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<script>
   /* ================= PZ ACCESS PASSWORD ================= */
   const PZ_ACCESS_PASSWORD = "1984";
   const PZ_AUTH_KEY = "pz_focus_follow_authenticated_v2";
@@ -25,65 +26,117 @@
 
   function pzShowPasswordGate() {
     if (document.getElementById("pz-password-gate")) return;
+
     const gate = document.createElement("div");
     gate.id = "pz-password-gate";
-    gate.style.position = "fixed";
-    gate.style.inset = "0";
-    gate.style.zIndex = "2147483647";
-    gate.style.pointerEvents = "auto";
-    gate.style.width = "100%";
-    gate.style.height = "100%";
+    gate.style.cssText = `
+      position:fixed; inset:0; z-index:2147483647; width:100%; height:100%;
+      display:flex; align-items:center; justify-content:center;
+      background:linear-gradient(145deg,#080a10,#151924 55%,#080a10);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      pointer-events:auto; box-sizing:border-box;
+    `;
+
     gate.innerHTML = `
-      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;
-                  background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-        <div style="width:min(420px,calc(100% - 40px));background:#fff;border-radius:18px;
-                    padding:32px;box-shadow:0 12px 40px rgba(0,0,0,.14);text-align:center;">
-          <div style="font-size:34px;margin-bottom:10px;">🔒</div>
-          <h2 style="margin:0 0 8px;">PZ Focus & Follow</h2>
-          <p style="color:#666;margin:0 0 22px;">Enter the password to continue.</p>
-          <input id="pz-password-input" type="password" autocomplete="current-password"
-                 placeholder="Password"
-                 style="width:100%;box-sizing:border-box;padding:13px 14px;border:1px solid #ccc;
-                        border-radius:10px;font-size:17px;margin-bottom:10px;">
-          <button id="pz-password-submit"
-                  style="width:100%;padding:13px;border:0;border-radius:10px;
-                         background:#111;color:#fff;font-size:17px;font-weight:600;">
-            Enter
-          </button>
-          <div id="pz-password-error" style="display:none;color:#c00;margin-top:12px;">
-            Incorrect password.
-          </div>
+      <div id="pz-lock-card" style="
+        width:min(560px,calc(100% - 32px)); max-height:calc(100% - 32px);
+        overflow:auto; box-sizing:border-box; padding:42px 40px 38px;
+        border-radius:30px; text-align:center;
+        background:rgba(24,29,43,.94);
+        border:1px solid rgba(145,170,220,.42);
+        box-shadow:0 24px 70px rgba(0,0,0,.55),0 0 50px rgba(65,100,180,.12);
+        color:#fff; backdrop-filter:blur(22px);
+      ">
+        <div style="font-size:58px;line-height:1;margin-bottom:14px;">🔒</div>
+        <h2 style="margin:0 0 10px;font-size:32px;letter-spacing:-.5px;">PZ Focus &amp; Follow</h2>
+        <p style="margin:0 0 26px;color:#c7cfdf;font-size:18px;">Enter the password to continue.</p>
+
+        <div id="pz-pin-dots" style="display:flex;justify-content:center;gap:18px;margin:0 0 28px;">
+          ${[0,1,2,3].map(i=>`<span data-pin-dot="${i}" style="
+            width:18px;height:18px;border-radius:50%;display:block;
+            border:2px solid #9eadd0;background:transparent;box-sizing:border-box;
+          "></span>`).join("")}
+        </div>
+
+        <input id="pz-password-input" type="password" inputmode="numeric"
+               autocomplete="off" aria-label="Password"
+               style="position:absolute;left:-10000px;width:1px;height:1px;opacity:0;">
+
+        <div id="pz-keypad" style="
+          display:grid;grid-template-columns:repeat(3,1fr);
+          gap:14px;max-width:390px;margin:0 auto 28px;
+        ">
+          ${["1","2","3","4","5","6","7","8","9","⌫","0",""].map((n,i)=>
+            n ? `<button type="button" data-key="${n}" style="
+              height:78px;border-radius:50%;border:1px solid rgba(160,180,225,.42);
+              background:linear-gradient(145deg,rgba(75,87,116,.82),rgba(38,45,64,.92));
+              color:#fff;font-size:${n==="⌫"?"28":"28"}px;font-weight:600;
+              box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 5px 14px rgba(0,0,0,.25);
+              touch-action:manipulation;
+            ">${n}</button>` : `<div></div>`
+          ).join("")}
+        </div>
+
+        <button id="pz-password-submit" type="button" style="
+          width:100%;max-width:390px;height:62px;border:0;border-radius:32px;
+          background:linear-gradient(180deg,#2d7cff,#0f5eea);
+          color:#fff;font-size:20px;font-weight:700;
+          box-shadow:0 8px 24px rgba(24,105,255,.34);
+          touch-action:manipulation;
+        ">Enter</button>
+
+        <div id="pz-password-error" style="display:none;color:#ff8f9a;margin-top:15px;font-size:16px;">
+          Incorrect password.
         </div>
       </div>`;
+
     document.body.appendChild(gate);
     document.body.style.overflow = "hidden";
 
     const input = document.getElementById("pz-password-input");
     const submit = document.getElementById("pz-password-submit");
     const error = document.getElementById("pz-password-error");
+    const dots = [...gate.querySelectorAll("[data-pin-dot]")];
+    let pin = "";
+
+    function renderPin() {
+      dots.forEach((dot,i)=>{
+        dot.style.background = i < pin.length ? "#fff" : "transparent";
+        dot.style.boxShadow = i < pin.length ? "0 0 10px rgba(255,255,255,.65)" : "none";
+      });
+      input.value = pin;
+    }
 
     function unlock() {
-      if (input.value === PZ_ACCESS_PASSWORD) {
+      if (pin === PZ_ACCESS_PASSWORD) {
         sessionStorage.setItem(PZ_AUTH_KEY, "true");
         sessionStorage.setItem(PZ_AUTH_TIME_KEY, String(Date.now()));
         gate.remove();
         document.body.style.overflow = "";
       } else {
         error.style.display = "block";
-        input.select();
+        pin = "";
+        renderPin();
       }
     }
-    submit.addEventListener("click", unlock);
-    input.addEventListener("keydown", e => {
-      if (e.key === "Enter") unlock();
-    });
-    setTimeout(() => input.focus(), 50);
-  }
 
-  function pzStartHourlyPasswordCheck() {
-    setInterval(function() {
-      if (!pzIsAuthenticated()) pzShowPasswordGate();
-    }, PZ_AUTH_INTERVAL_MS);
+    gate.querySelectorAll("[data-key]").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        const key=btn.getAttribute("data-key");
+        error.style.display="none";
+        if(key==="⌫") pin=pin.slice(0,-1);
+        else if(pin.length<8) pin += key;
+        renderPin();
+      });
+    });
+    submit.addEventListener("click", unlock);
+    gate.addEventListener("keydown", e=>{
+      if(e.key>="0" && e.key<="9" && pin.length<8) { pin+=e.key; renderPin(); }
+      if(e.key==="Backspace") { pin=pin.slice(0,-1); renderPin(); }
+      if(e.key==="Enter") unlock();
+    });
+    gate.tabIndex=0;
+    gate.focus();
   }
 
   function pzLockNow() {
@@ -91,32 +144,10 @@
       sessionStorage.removeItem(PZ_AUTH_KEY);
       sessionStorage.removeItem(PZ_AUTH_TIME_KEY);
     } catch (e) {}
-
-    // If the gate already exists, reset it rather than silently doing nothing.
-    const existing = document.getElementById("pz-password-gate");
-    if (existing) {
-      existing.style.display = "flex";
-      existing.style.position = "fixed";
-      existing.style.inset = "0";
-      existing.style.zIndex = "2147483647";
-      const input = document.getElementById("pz-password-input");
-      if (input) {
-        input.value = "";
-        input.focus();
-      }
-      return;
-    }
-
     pzShowPasswordGate();
-    const gate = document.getElementById("pz-password-gate");
-    if (gate) {
-      gate.style.position = "fixed";
-      gate.style.inset = "0";
-      gate.style.zIndex = "2147483647";
-    }
+    const gate=document.getElementById("pz-password-gate");
+    if(gate){ gate.style.display="flex"; gate.style.zIndex="2147483647"; gate.focus(); }
   }
-
-  window.pzLockNow = pzLockNow;
 
   function pzEnforcePassword() {
     if (!pzIsAuthenticated()) pzShowPasswordGate();
