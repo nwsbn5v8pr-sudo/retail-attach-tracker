@@ -131,6 +131,8 @@ async function initSupabase() {
     }
   }
 
+  window.pzLockNow = pzLockNow;
+
   function pzEnforcePassword() {
     if (!pzIsAuthenticated()) pzShowPasswordGate();
   }
@@ -902,7 +904,7 @@ async function initSupabase() {
         <div class="more-menu" id="moreMenu">
           <button type="button" onclick="checkAll(false);closeMoreMenu()">◻️ Clear Check-Ins</button>
           <button type="button" onclick="exportCSV();closeMoreMenu()">📥 Export CSV</button>
-          <button type="button" onclick="pzLockNow();closeMoreMenu()">🔒 Lock</button>
+          <button type="button" onclick="window.pzLockNow();closeMoreMenu()">🔒 Lock</button>
           <button type="button" class="menu-danger" onclick="resetCounts();closeMoreMenu()">🔄 Reset Day</button>
         </div>
       </div>
