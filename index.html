@@ -1397,6 +1397,12 @@
     }
   }
 
+  function normalizeDisplayNames() {
+    (data || []).forEach(function(m) {
+      if (m && m.name) m.displayName = displayMemberName(m.name);
+    });
+  }
+
   function saveLocalState() {
     // 1. Serialize everything up front. If this throws, nothing is written.
     let liveJson, histJson;
@@ -1740,7 +1746,7 @@
       item.innerHTML = `
         <div class="rank-icon ${rankClass}">${rankIcon}</div>
         <div class="performer-info">
-          <span class="performer-name">${escapeHtml(p.name)}</span>
+          <span class="performer-name">${escapeHtml((p.displayName || displayMemberName(p.name)))}</span>
           <span class="performer-stats">${hits === 5 || (currentTab !== 'daily' && hits > 0) ? '🏆 ' + hits + ' Slams' : hits + '/5 categories'} • ${units} units</span>
         </div>
       `;
@@ -1762,7 +1768,7 @@
           <div class="name-cell-wrap" onclick="toggleCheckIn(${p.id})">
             <span class="chk-badge" id="chk-badge-${p.id}">${p.checkedIn ? '✅' : '◻️'}</span>
             <div class="name-cell">
-              <span class="member-name" id="name-${p.id}">${escapeHtml(p.name)}</span>
+              <span class="member-name" id="name-${p.id}">${escapeHtml((p.displayName || displayMemberName(p.name)))}</span>
               <span class="role-tag">${escapeHtml(p.role)}</span>
             </div>
           </div>
@@ -1828,7 +1834,7 @@
           <div class="name-cell-wrap" style="cursor: default;">
             <span class="chk-badge">${p.checkedIn ? '✅' : '◻️'}</span>
             <div class="name-cell">
-              <span class="member-name">${escapeHtml(p.name)}</span>
+              <span class="member-name">${escapeHtml((p.displayName || displayMemberName(p.name)))}</span>
               <span class="role-tag">${escapeHtml(p.role)}</span>
             </div>
           </div>
@@ -1852,7 +1858,7 @@
           <div class="name-cell-wrap" style="cursor: default;">
             <span class="chk-badge" style="font-size: 13px; font-weight: 700;">${p.shiftsWorked}d</span>
             <div class="name-cell">
-              <span class="member-name">${escapeHtml(p.name)}</span>
+              <span class="member-name">${escapeHtml((p.displayName || displayMemberName(p.name)))}</span>
               <span class="role-tag">${escapeHtml(p.role)} • ${p.shiftsWorked} Shifts</span>
             </div>
           </div>
@@ -1877,6 +1883,7 @@
   }
 
   function renderTableStructure() {
+    normalizeDisplayNames();
     if (isEditingNote()) return;
     const tbody = document.getElementById('tableBody');
     if (!tbody) return;
