@@ -24,10 +24,19 @@ async function initSupabase() {
 
   /* ================= PZ ACCESS PASSWORD ================= */
   const PZ_ACCESS_PASSWORD = "1984";
-  const PZ_AUTH_KEY = "pz_focus_follow_authenticated_v1";
+  const PZ_AUTH_KEY = "pz_focus_follow_authenticated_v2";
+  const PZ_AUTH_TIME_KEY = "pz_focus_follow_authenticated_at_v1";
+  const PZ_AUTH_INTERVAL_MS = 60 * 60 * 1000;
 
   function pzIsAuthenticated() {
-    return sessionStorage.getItem(PZ_AUTH_KEY) === "true";
+    if (sessionStorage.getItem(PZ_AUTH_KEY) !== "true") return false;
+    const authenticatedAt = Number(sessionStorage.getItem(PZ_AUTH_TIME_KEY) || 0);
+    if (!authenticatedAt || (Date.now() - authenticatedAt) >= PZ_AUTH_INTERVAL_MS) {
+      sessionStorage.removeItem(PZ_AUTH_KEY);
+      sessionStorage.removeItem(PZ_AUTH_TIME_KEY);
+      return false;
+    }
+    return true;
   }
 
   function pzShowPasswordGate() {
@@ -66,6 +75,7 @@ async function initSupabase() {
     function unlock() {
       if (input.value === PZ_ACCESS_PASSWORD) {
         sessionStorage.setItem(PZ_AUTH_KEY, "true");
+        sessionStorage.setItem(PZ_AUTH_TIME_KEY, String(Date.now()));
         gate.remove();
         document.body.style.overflow = "";
       } else {
@@ -78,6 +88,12 @@ async function initSupabase() {
       if (e.key === "Enter") unlock();
     });
     setTimeout(() => input.focus(), 50);
+  }
+
+  function pzStartHourlyPasswordCheck() {
+    setInterval(function() {
+      if (!pzIsAuthenticated()) pzShowPasswordGate();
+    }, PZ_AUTH_INTERVAL_MS);
   }
 
   function pzEnforcePassword() {
@@ -1292,9 +1308,20 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     if (!name) return "";
     const parts = String(name).trim().split(/\s+/);
     if (parts.length < 2) return String(name).trim();
+
     const last = parts[parts.length - 1];
-    const letters = last.match(/[A-Za-z]/g);
-    const initial = letters && letters.length ? letters[0].toUpperCase() : last.charAt(0);
+    const letters = (last.match(/[A-Za-z]/g) || []).join("").toUpperCase();
+
+    // If the roster already supplies a two-letter initial (e.g. "LB."),
+    // preserve both letters. A normal full surname (e.g. "Bravo") remains
+    // a single initial ("B.").
+    let initial = "";
+    if (/[.]\s*$/.test(last) && letters.length >= 2) {
+      initial = letters.slice(0, 2);
+    } else {
+      initial = letters ? letters.charAt(0) : last.charAt(0);
+    }
+
     return parts.slice(0, -1).join(" ") + " " + initial + ".";
   }
 
@@ -3576,18 +3603,34 @@ function pzUnique(list){
     const k=String(m.id);
     if(!map.has(k)||Number(m.rev||0)>=Number(map.get(k).rev||0))map.set(k,m);
   });
-  return [...map.values()].filter(function(m){ return String(m.id)!=='NaN' && String(m.name||'').trim()!=='Luis SJ'; });
+  return [...map.values()].filter(function(m){ return String(m.id)!=='NaN'; });
 }
 async function pzCloudLoad(){
-  const {data:rows,error}=await supabaseClient.from(PZ_MEMBERS_TABLE).select("*").eq("removed",false).order("id");
-  if(error)throw error;
-  if(rows&&rows.length)return pzUnique(rows.map(pzFromCloud));
-  const seed=roster.map((m,i)=>({id:"pz_"+i,name:m.name,role:m.role||"Specialist",
-    checked_in:false,ac:0,pz:0,services:0,biz:0,acc:0,step:"",notes:"",revision:0,
-    updated_at:new Date().toISOString(),updated_by:CLIENT_ID,removed:false,shift_date:getTodayString()}));
-  const {data:seeded,error:se}=await supabaseClient.from(PZ_MEMBERS_TABLE).upsert(seed,{onConflict:"id"}).select("*");
-  if(se)throw se;
-  return pzUnique((seeded||[]).map(pzFromCloud));
+  const {data:rows,error}=await supabaseClient.from(PZ_MEMBERS_TABLE)
+    .select("*").eq("removed",false).order("id");
+  if(error) throw error;
+
+  const cloudRows=Array.isArray(rows)?rows:[];
+  const cloudById=new Map(cloudRows.map(r=>[String(r.id),r]));
+  const missing=roster.map(function(m){
+    const id="roster_"+String(m.name||"").toLowerCase()
+      .replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
+    if(cloudById.has(id)) return null;
+    return {
+      id:id,name:m.name,role:m.role||"Specialist",checked_in:false,
+      ac:0,pz:0,services:0,biz:0,acc:0,step:"",notes:"",revision:0,
+      updated_at:new Date().toISOString(),updated_by:CLIENT_ID,
+      removed:false,shift_date:getTodayString()
+    };
+  }).filter(Boolean);
+
+  if(missing.length){
+    const {data:added,error:addErr}=await supabaseClient
+      .from(PZ_MEMBERS_TABLE).upsert(missing,{onConflict:"id"}).select("*");
+    if(addErr) throw addErr;
+    cloudRows.push(...(added||[]));
+  }
+  return pzUnique(cloudRows.map(pzFromCloud));
 }
 async function pzHydrate(){
   setSyncBadge("☁️ Loading shared PZ tracker…");
@@ -3684,5 +3727,5 @@ async function initSupabaseSync(){
 
 window.addEventListener('load', function(){ setTimeout(function(){ initSupabaseSync(); }, 100); });
 
-window.addEventListener('load', pzEnforcePassword);
+window.addEventListener('load', function(){ pzEnforcePassword(); pzStartHourlyPasswordCheck(); });
 </script>
