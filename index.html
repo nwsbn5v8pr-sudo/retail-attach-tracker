@@ -689,103 +689,6 @@
     display: flex;
     gap: 8px;
   }
-  /* Passcode Gate Overlay */
-  .auth-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: var(--bg-primary);
-    z-index: 9999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-  }
-  .auth-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 30px 24px;
-    max-width: 360px;
-    width: 100%;
-    text-align: center;
-    box-shadow: 0 12px 36px rgba(0,0,0,0.12);
-  }
-  .auth-icon {
-    font-size: 40px;
-    margin-bottom: 12px;
-  }
-  .auth-title {
-    font-size: 20px;
-    font-weight: 700;
-    margin-bottom: 6px;
-  }
-  .auth-sub {
-    font-size: 13px;
-    color: var(--text-secondary);
-    margin-bottom: 20px;
-    line-height: 1.4;
-  }
-  .auth-pin-box {
-    display: flex;
-    justify-content: center;
-    gap: 12px;
-    margin-bottom: 24px;
-  }
-  .auth-dot {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    border: 2px solid var(--border-strong);
-    background: transparent;
-    transition: all 0.15s ease;
-  }
-  .auth-dot.filled {
-    background: var(--accent);
-    border-color: var(--accent);
-    transform: scale(1.1);
-  }
-  .keypad-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    max-width: 260px;
-    margin: 0 auto;
-  }
-  .keypad-btn {
-    height: 56px;
-    border-radius: 50%;
-    font-size: 22px;
-    font-weight: 600;
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    border: 1px solid var(--border);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    user-select: none;
-    touch-action: manipulation;
-  }
-  .keypad-btn:active {
-    background: var(--accent);
-    color: #fff;
-    border-color: var(--accent);
-  }
-  .keypad-btn.action {
-    font-size: 14px;
-    font-weight: 600;
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-  }
-  .keypad-btn.action:active {
-    background: transparent;
-    color: var(--accent);
-  }
-
   .member-modal-backdrop {
     position: fixed;
     inset: 0;
@@ -852,40 +755,7 @@
       </div>
     </div>
   </div>
-
-  <!-- Passcode Gate Screen -->
-  <div class="auth-overlay" id="authGate">
-    <div class="auth-card">
-      <div class="auth-icon">🔒</div>
-      <div class="auth-title">Store Access Gate</div>
-      <div class="auth-sub">Enter store PIN to unlock. PIN is required every hour on each device.</div>
-      
-      <div class="auth-pin-box">
-        <div class="auth-dot" id="dot-0"></div>
-        <div class="auth-dot" id="dot-1"></div>
-        <div class="auth-dot" id="dot-2"></div>
-        <div class="auth-dot" id="dot-3"></div>
-      </div>
-
-      <div class="keypad-grid">
-        <button type="button" class="keypad-btn" onclick="enterPinDigit('1')">1</button>
-        <button type="button" class="keypad-btn" onclick="enterPinDigit('2')">2</button>
-        <button type="button" class="keypad-btn" onclick="enterPinDigit('3')">3</button>
-        <button type="button" class="keypad-btn" onclick="enterPinDigit('4')">4</button>
-        <button type="button" class="keypad-btn" onclick="enterPinDigit('5')">5</button>
-        <button type="button" class="keypad-btn" onclick="enterPinDigit('6')">6</button>
-        <button type="button" class="keypad-btn" onclick="enterPinDigit('7')">7</button>
-        <button type="button" class="keypad-btn" onclick="enterPinDigit('8')">8</button>
-        <button type="button" class="keypad-btn" onclick="enterPinDigit('9')">9</button>
-        <button type="button" class="keypad-btn action" onclick="clearPin()">Clear</button>
-        <button type="button" class="keypad-btn" onclick="enterPinDigit('0')">0</button>
-        <button type="button" class="keypad-btn action" onclick="deletePinDigit()">⌫</button>
-      </div>
-      <div style="margin-top: 18px; font-size: 11px; color: var(--text-secondary);">Store Authorized Access Only</div>
-    </div>
-  </div>
-
-  <!-- Top Action Bar -->
+<!-- Top Action Bar -->
   <div class="top-bar">
     <div class="app-title">
       🛍️PZ Focus & Follow 🆙
@@ -900,7 +770,6 @@
       <div class="more-menu-wrap">
         <button class="secondary more-menu-btn" type="button" onclick="toggleMoreMenu(event)" aria-haspopup="true" aria-expanded="false">⋯ More</button>
         <div class="more-menu" id="moreMenu">
-          <button type="button" onclick="lockDeviceNow();closeMoreMenu()">🔒 Lock</button>
           <button type="button" onclick="checkAll(false);closeMoreMenu()">◻️ Clear Check-Ins</button>
           <button type="button" onclick="exportCSV();closeMoreMenu()">📥 Export CSV</button>
           <button type="button" class="menu-danger" onclick="resetCounts();closeMoreMenu()">🔄 Reset Day</button>
@@ -1053,10 +922,7 @@
 <script>
   const STORAGE_KEY_LIVE = "pz_tracker_live_state_v10";
   const STORAGE_KEY_HISTORY = "pz_tracker_history_records_v10";
-  const STORAGE_KEY_AUTH = "pz_tracker_auth_unlocked_ts";
   const STORAGE_KEY_LIVE_DAY = "pz_tracker_live_day_v10";
-  const STORE_PASSCODE = "1984"; // 4-digit passcode for store access
-  const PIN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour expiry (in ms)
   const SYNC_TOPIC = "apple_retail_attach_tracker_shared_store_room";
   // Stable per-DEVICE id (persists across reloads) so a refresh is not treated
   // as a brand-new peer. A random-per-load id made every reload look like a
@@ -1131,82 +997,8 @@
     });
   }
 
-  let enteredPin = "";
 
-  function checkPasscodeGate() {
-    try {
-      const unlockedTS = parseInt(localStorage.getItem(STORAGE_KEY_AUTH), 10) || 0;
-      const now = Date.now();
-      const isStillValid = (now - unlockedTS) < PIN_EXPIRY_MS;
-      
-      const gate = document.getElementById('authGate');
-      if (gate) {
-        if (isStillValid) {
-          gate.style.display = 'none';
-        } else {
-          gate.style.display = 'flex';
-        }
-      }
-    } catch(e) {}
-  }
-
-  function enterPinDigit(digit) {
-    if (enteredPin.length < 4) {
-      enteredPin += digit;
-      updatePinDots();
-      if (enteredPin.length === 4) {
-        setTimeout(verifyPin, 100);
-      }
-    }
-  }
-
-  function deletePinDigit() {
-    if (enteredPin.length > 0) {
-      enteredPin = enteredPin.slice(0, -1);
-      updatePinDots();
-    }
-  }
-
-  function clearPin() {
-    enteredPin = "";
-    updatePinDots();
-  }
-
-  function updatePinDots() {
-    for (let i = 0; i < 4; i++) {
-      const dot = document.getElementById(`dot-${i}`);
-      if (dot) {
-        if (i < enteredPin.length) dot.classList.add('filled');
-        else dot.classList.remove('filled');
-      }
-    }
-  }
-
-  function verifyPin() {
-    if (enteredPin === STORE_PASSCODE) {
-      try {
-        localStorage.setItem(STORAGE_KEY_AUTH, Date.now().toString());
-      } catch(e) {}
-      const gate = document.getElementById('authGate');
-      if (gate) gate.style.display = 'none';
-      enteredPin = "";
-      updatePinDots();
-    } else {
-      alert("❌ Incorrect Store Passcode. Please try again.");
-      clearPin();
-    }
-  }
-
-  function lockDeviceNow() {
-    try {
-      localStorage.removeItem(STORAGE_KEY_AUTH);
-    } catch(e) {}
-    clearPin();
-    const gate = document.getElementById('authGate');
-    if (gate) gate.style.display = 'flex';
-  }
-
-  const INITIAL_ROSTER = [{"name": "Felipe Flores", "role": "Business Expert"}, {"name": "Edward Owens", "role": "Business Pro"}, {"name": "Brad Teegarden", "role": "Creative"}, {"name": "Joey Rocks", "role": "Creative"}, {"name": "Nicholas Yousif", "role": "Creative"}, {"name": "Paul Zaldivar", "role": "Creative"}, {"name": "Dawn Oree", "role": "Creative Pro"}, {"name": "Joe Davis", "role": "Creative Pro"}, {"name": "Kassie Sicairos", "role": "Creative Pro"}, {"name": "Andrew Portillo", "role": "Expert"}, {"name": "Patty Wigdahl", "role": "Expert"}, {"name": "Tiago Nocera", "role": "Expert"}, {"name": "Tom Antorietto Jr", "role": "Expert"}, {"name": "Dee Mitchell", "role": "Pro"}, {"name": "Chris White", "role": "Pro"}, {"name": "Michelle Trester", "role": "POP"}, {"name": "Adriel Guerrero", "role": "Specialist"}, {"name": "Aladin Bader", "role": "Specialist"}, {"name": "Alejandra Gomez", "role": "Specialist"}, {"name": "Andre Salehian", "role": "Specialist"}, {"name": "Angelo Montano", "role": "Specialist"}, {"name": "Brooke Polendo", "role": "Specialist"}, {"name": "Cesar Lopez Belmudez", "role": "Specialist"}, {"name": "Chanel Ammo", "role": "Specialist"}, {"name": "Chris Olivares", "role": "Specialist"}, {"name": "Daniel Cuellar", "role": "Specialist"}, {"name": "Darla Co", "role": "Specialist"}, {"name": "Dennise Juarez Aguilar", "role": "Specialist"}, {"name": "Don Anders", "role": "Specialist"}, {"name": "Dylan Shaw", "role": "Specialist"}, {"name": "Farid Lopez", "role": "Specialist"}, {"name": "Felix Fazakerley", "role": "Specialist"}, {"name": "Francia Sanchez", "role": "Specialist"}, {"name": "Frank O'Connor", "role": "Specialist"}, {"name": "Halle Horning", "role": "Specialist"}, {"name": "Henry Avalos Martell", "role": "Specialist"}, {"name": "Jacob Olson", "role": "Specialist"}, {"name": "Jahkell Robins", "role": "Specialist"}, {"name": "Jake Opatz", "role": "Specialist"}, {"name": "Jamal Delaney", "role": "Specialist"}, {"name": "James O'Shea", "role": "Specialist"}, {"name": "Jay Jimenez", "role": "Specialist"}, {"name": "Josheiry Torres", "role": "Specialist"}, {"name": "Joshua Saradpon", "role": "Specialist"}, {"name": "Josh Wise", "role": "Specialist"}, {"name": "Josiah Bergstrom", "role": "Specialist"}, {"name": "Joyce Lam", "role": "Specialist"}, {"name": "Kaitlyn Villa", "role": "Specialist"}, {"name": "Kari DeVault", "role": "Specialist"}, {"name": "Ken Mata", "role": "Specialist"}, {"name": "Kevin Corona Lozada", "role": "Specialist"}, {"name": "Ke\u2019Ana Alonzo", "role": "Specialist"}, {"name": "Kristal", "role": "Specialist"}, {"name": "Lexi English", "role": "Specialist"}, {"name": "Liam McEwan", "role": "Specialist"}, {"name": "Loren Fish", "role": "Specialist"}, {"name": "Lucas Martinez", "role": "Specialist"}, {"name": "Luis Sosa", "role": "Specialist"}, {"name": "Luis Soto Jr", "role": "Specialist"}, {"name": "Melody Pauls", "role": "Specialist"}, {"name": "Michael Terrientes", "role": "Specialist"}, {"name": "Miranda Gonzalez", "role": "Specialist"}, {"name": "Natalie Gibson", "role": "Specialist"}, {"name": "Nick Avalos", "role": "Specialist"}, {"name": "Ofelia Carrillo", "role": "Specialist"}, {"name": "Peter Robinson", "role": "Specialist"}, {"name": "Ramon Beltran", "role": "Specialist"}, {"name": "Ray Johnson", "role": "Specialist"}, {"name": "Roanne Jans", "role": "Specialist"}, {"name": "Rob Koepp", "role": "Specialist"}, {"name": "Ron Ejanda", "role": "Specialist"}, {"name": "Sador Rusom", "role": "Specialist"}, {"name": "SKYLAR WARE", "role": "Specialist"}, {"name": "Thania Medina", "role": "Specialist"}, {"name": "Tommy Chambers", "role": "Specialist"}, {"name": "Trisha Nguyen", "role": "Specialist"}, {"name": "Valeria Jacobo", "role": "Specialist"}, {"name": "Zahra Rahmaan", "role": "Specialist"}, {"name": "Zion Maly", "role": "Specialist"}, {"name": "Delaine Downie", "role": "Tech and Merch Pro"}, {"name": "Sara Gharabaghli", "role": "Tech and Merch Pro"}];
+  const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name": "Edward O.", "role": "Business Pro"}, {"name": "Brad T.", "role": "Creative"}, {"name": "Joey R.", "role": "Creative"}, {"name": "Nicholas Y.", "role": "Creative"}, {"name": "Paul Z.", "role": "Creative"}, {"name": "Dawn O.", "role": "Creative Pro"}, {"name": "Joe D.", "role": "Creative Pro"}, {"name": "Kassie S.", "role": "Creative Pro"}, {"name": "Andrew P.", "role": "Expert"}, {"name": "Patty W.", "role": "Expert"}, {"name": "Tiago N.", "role": "Expert"}, {"name": "Tom Antorietto J.", "role": "Expert"}, {"name": "Dee M.", "role": "Pro"}, {"name": "Chris W.", "role": "Pro"}, {"name": "Michelle T.", "role": "POP"}, {"name": "Adriel G.", "role": "Specialist"}, {"name": "Aladin B.", "role": "Specialist"}, {"name": "Alejandra G.", "role": "Specialist"}, {"name": "Andre S.", "role": "Specialist"}, {"name": "Angelo M.", "role": "Specialist"}, {"name": "Brooke P.", "role": "Specialist"}, {"name": "Cesar Lopez B.", "role": "Specialist"}, {"name": "Chanel A.", "role": "Specialist"}, {"name": "Chris O.", "role": "Specialist"}, {"name": "Daniel C.", "role": "Specialist"}, {"name": "Darla C.", "role": "Specialist"}, {"name": "Dennise Juarez A.", "role": "Specialist"}, {"name": "Don A.", "role": "Specialist"}, {"name": "Dylan S.", "role": "Specialist"}, {"name": "Farid L.", "role": "Specialist"}, {"name": "Felix F.", "role": "Specialist"}, {"name": "Francia S.", "role": "Specialist"}, {"name": "Frank O.", "role": "Specialist"}, {"name": "Halle H.", "role": "Specialist"}, {"name": "Henry Avalos M.", "role": "Specialist"}, {"name": "Jacob O.", "role": "Specialist"}, {"name": "Jahkell R.", "role": "Specialist"}, {"name": "Jake O.", "role": "Specialist"}, {"name": "Jamal D.", "role": "Specialist"}, {"name": "James O.", "role": "Specialist"}, {"name": "Jay J.", "role": "Specialist"}, {"name": "Josheiry T.", "role": "Specialist"}, {"name": "Joshua S.", "role": "Specialist"}, {"name": "Josh W.", "role": "Specialist"}, {"name": "Josiah B.", "role": "Specialist"}, {"name": "Joyce L.", "role": "Specialist"}, {"name": "Kaitlyn V.", "role": "Specialist"}, {"name": "Kari D.", "role": "Specialist"}, {"name": "Ken M.", "role": "Specialist"}, {"name": "Kevin Corona L.", "role": "Specialist"}, {"name": "Ke’Ana A.", "role": "Specialist"}, {"name": "Kristal", "role": "Specialist"}, {"name": "Lexi E.", "role": "Specialist"}, {"name": "Liam M.", "role": "Specialist"}, {"name": "Loren F.", "role": "Specialist"}, {"name": "Lucas M.", "role": "Specialist"}, {"name": "Luis S.", "role": "Specialist"}, {"name": "Luis Soto J.", "role": "Specialist"}, {"name": "Melody P.", "role": "Specialist"}, {"name": "Michael T.", "role": "Specialist"}, {"name": "Miranda G.", "role": "Specialist"}, {"name": "Natalie G.", "role": "Specialist"}, {"name": "Nick A.", "role": "Specialist"}, {"name": "Ofelia C.", "role": "Specialist"}, {"name": "Peter R.", "role": "Specialist"}, {"name": "Ramon B.", "role": "Specialist"}, {"name": "Ray J.", "role": "Specialist"}, {"name": "Roanne J.", "role": "Specialist"}, {"name": "Rob K.", "role": "Specialist"}, {"name": "Ron E.", "role": "Specialist"}, {"name": "Sador R.", "role": "Specialist"}, {"name": "SKYLAR W.", "role": "Specialist"}, {"name": "Thania M.", "role": "Specialist"}, {"name": "Tommy C.", "role": "Specialist"}, {"name": "Trisha N.", "role": "Specialist"}, {"name": "Valeria J.", "role": "Specialist"}, {"name": "Zahra R.", "role": "Specialist"}, {"name": "Zion M.", "role": "Specialist"}, {"name": "Delaine D.", "role": "Tech and Merch Pro"}, {"name": "Sara G.", "role": "Tech and Merch Pro"}];
 
   let currentTab = 'daily'; // 'daily' | 'priorday' | 'weekly' | 'monthly' | 'quarterly' | 'history'
   let selectedPeriodKey = 'current';
@@ -1425,6 +1217,16 @@
     return !!fp && seenInbound.indexOf(fp) !== -1;
   }
 
+  function displayMemberName(name) {
+    if (!name) return "";
+    const parts = String(name).trim().split(/\s+/);
+    if (parts.length < 2) return String(name).trim();
+    const last = parts[parts.length - 1];
+    const letters = last.match(/[A-Za-z]/g);
+    const initial = letters && letters.length ? letters[0].toUpperCase() : last.charAt(0);
+    return parts.slice(0, -1).join(" ") + " " + initial + ".";
+  }
+
   function escapeHtml(str) {
     if (!str) return '';
     return String(str)
@@ -1500,7 +1302,7 @@
             const newId = data.length > 0 ? Math.max(...data.map(d => d.id)) + 1 : 0;
             target = {
               id: savedItem.id !== undefined && !data.some(d => d.id === savedItem.id) ? savedItem.id : newId,
-              name: savedItem.name,
+              name: displayMemberName(savedItem.name),
               role: savedItem.role || "Specialist",
               checkedIn: false,
               ac: 0,
@@ -2860,8 +2662,7 @@
       }
 
       // Keep enforcing the 1-hour passcode expiry.
-      checkPasscodeGate();
-    }
+}
 
     // Check every 30 seconds
     setInterval(runEngines, 30000);
@@ -4166,8 +3967,7 @@
   };
 
   // Initialize
-  checkPasscodeGate();
-  setInterval(checkPasscodeGate, 15000); // Poll passcode gate every 15s to enforce 1-hour expiry on active iPad
+
   renderTableStructure();
   updateSortHeaderIcons();
   updateTotals();
