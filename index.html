@@ -5,23 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>🛍️PZ Focus & Follow 🆙</title>
 <!-- Lightweight MQTT over WebSockets for Instant Serverless Cloud Sync -->
-<script src="https://unpkg.com/mqtt/dist/mqtt.min.js">
-async function initSupabase() {
-  try {
-    if (!window.supabase) throw new Error('Supabase library not loaded');
-    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-    supabaseReady = true;
-    await hydrateFromCloud();
-    if (typeof subscribeCloudChanges === 'function') subscribeCloudChanges();
-    setSyncBadge('☁️ Cloud Sync Connected');
-  } catch (err) {
-    console.error('Supabase startup failed:', err);
-    supabaseReady = false;
-    setSyncBadge('⚠️ Cloud Sync Failed');
-  }
-}
-
-
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   /* ================= PZ ACCESS PASSWORD ================= */
   const PZ_ACCESS_PASSWORD = "1984";
   const PZ_AUTH_KEY = "pz_focus_follow_authenticated_v2";
@@ -46,6 +30,7 @@ async function initSupabase() {
     gate.style.position = "fixed";
     gate.style.inset = "0";
     gate.style.zIndex = "2147483647";
+    gate.style.pointerEvents = "auto";
     gate.style.width = "100%";
     gate.style.height = "100%";
     gate.innerHTML = `
@@ -904,7 +889,7 @@ async function initSupabase() {
         <div class="more-menu" id="moreMenu">
           <button type="button" onclick="checkAll(false);closeMoreMenu()">◻️ Clear Check-Ins</button>
           <button type="button" onclick="exportCSV();closeMoreMenu()">📥 Export CSV</button>
-          <button type="button" onclick="window.pzLockNow();closeMoreMenu()">🔒 Lock</button>
+          <button type="button" onclick="window.pzLockNow(); closeMoreMenu(); return false;">🔒 Lock</button>
           <button type="button" class="menu-danger" onclick="resetCounts();closeMoreMenu()">🔄 Reset Day</button>
         </div>
       </div>
