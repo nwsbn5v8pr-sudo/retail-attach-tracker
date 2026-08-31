@@ -21,7 +21,6 @@ async function initSupabase() {
   }
 }
 
-initSupabaseSync();
 </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -3573,4 +3572,6 @@ async function initSupabaseSync(){
   }catch(e){supabaseReady=false;console.error("PZ CLOUD INIT FAILED",e);setSyncBadge("🔴 PZ Cloud Sync Failed");}
 }
 
+
+window.addEventListener('load', function(){ setTimeout(function(){ initSupabaseSync(); }, 100); });
 </script>
