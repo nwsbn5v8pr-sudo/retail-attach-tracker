@@ -1027,7 +1027,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     name: item.name,
     role: item.role,
     checkedIn: false,
-    ac: 0, pz: 0, biz: 0, acc: 0,
+    ac: 0, pz: 0, services: 0, biz: 0, acc: 0,
     step: '', notes: '', updatedAt: Date.now(), rev: 0, revBy: ''
   }));
 
@@ -1773,7 +1773,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     if (isLive) {
       tr.innerHTML = `
         <td class="col-sticky">
-          <div class="name-cell-wrap" onclick="toggleCheckIn(${p.id})">
+          <div class="name-cell-wrap" onclick="toggleCheckIn('${p.id}')">
             <span class="chk-badge" id="chk-badge-${p.id}">${p.checkedIn ? '✅' : '◻️'}</span>
             <div class="name-cell">
               <span class="member-name" id="name-${p.id}">${escapeHtml((p.displayName || displayMemberName(p.name)))}</span>
@@ -1784,37 +1784,37 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
         <td style="text-align:center;" id="val-slam-${p.id}"></td>
         <td style="text-align:center;">
           <div class="counter-box">
-            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts(${p.id}, 'ac', -1)">−</button>
+            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'ac', -1)">−</button>
             <span class="cnt-val" id="val-ac-${p.id}">${p.ac}</span>
-            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(${p.id}, 'ac', 1)">+</button>
+            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'ac', 1)">+</button>
           </div>
         </td>
         <td style="text-align:center;">
           <div class="counter-box">
-            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts(${p.id}, 'upgrade', -1)">−</button>
+            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'upgrade', -1)">−</button>
             <span class="cnt-val" id="val-up-${p.id}">${p.upgrade}</span>
-            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(${p.id}, 'upgrade', 1)">+</button>
+            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'upgrade', 1)">+</button>
           </div>
         </td>
         <td style="text-align:center;">
           <div class="counter-box">
-            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts(${p.id}, 'services', -1)">−</button>
+            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'services', -1)">−</button>
             <span class="cnt-val" id="val-srv-${p.id}">${p.services}</span>
-            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(${p.id}, 'services', 1)">+</button>
+            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'services', 1)">+</button>
           </div>
         </td>
         <td style="text-align:center;">
           <div class="counter-box">
-            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts(${p.id}, 'biz', -1)">−</button>
+            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'biz', -1)">−</button>
             <span class="cnt-val" id="val-biz-${p.id}">${p.biz}</span>
-            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(${p.id}, 'biz', 1)">+</button>
+            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'biz', 1)">+</button>
           </div>
         </td>
         <td style="text-align:center;">
           <div class="counter-box">
-            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts(${p.id}, 'acc', -1)">−</button>
+            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'acc', -1)">−</button>
             <span class="cnt-val" id="val-acc-${p.id}">${p.acc}</span>
-            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts(${p.id}, 'acc', 1)">+</button>
+            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'acc', 1)">+</button>
           </div>
         </td>
         <td style="text-align:center;">
@@ -1890,7 +1890,22 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     return !!(el && el.classList && el.classList.contains('notes-input'));
   }
 
+  function normalizePZMember(m) {
+    if (!m) return m;
+    m.ac = Number(m.ac || 0);
+    m.pz = Number(m.pz || m.upgrade || 0);
+    m.upgrade = Number(m.pz || 0);
+    m.services = Number(m.services || 0);
+    m.biz = Number(m.biz || 0);
+    m.acc = Number(m.acc || 0);
+    m.checkedIn = !!m.checkedIn;
+    m.step = m.step || '';
+    m.notes = m.notes || '';
+    return m;
+  }
+
   function renderTableStructure() {
+    data = data.map(normalizePZMember);
     const seenRenderIds = new Set();
     data = data.filter(m => !PERMANENTLY_REMOVED_MEMBER_NAMES.has(String(m.name || '').trim())).filter(m => {
       const key = String(m.id != null ? m.id : m.name);
@@ -1942,7 +1957,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
 
   function toggleCheckIn(index) {
     if (currentTab !== 'daily') return;
-    const member = data.find(d => d.id === index);
+    const member = data.find(d => String(d.id) === String(index));
     if (!member) return;
     pushUndoSnapshot();
     member.checkedIn = !member.checkedIn;
@@ -1958,7 +1973,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
 
   function renderCheckInVisual(index) {
     if (currentTab !== 'daily') return;
-    const member = data.find(d => d.id === index);
+    const member = data.find(d => String(d.id) === String(index));
     if (!member) return;
     const row = document.getElementById(`row-${index}`);
     const badge = document.getElementById(`chk-badge-${index}`);
@@ -2039,7 +2054,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
 
   function updateCounts(index, metric, delta) {
     if (currentTab !== 'daily') return;
-    const member = data.find(d => d.id === index);
+    const member = data.find(d => String(d.id) === String(index));
     if (!member) return;
 
     pushUndoSnapshot();
@@ -2064,7 +2079,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
 
   function saveStep(index, val) {
     if (currentTab !== 'daily') return;
-    const member = data.find(d => d.id === index);
+    const member = data.find(d => String(d.id) === String(index));
     if (!member) return;
     pushUndoSnapshot();
     member.step = val;
@@ -2078,7 +2093,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
 
   function saveNote(index, val) {
     if (currentTab !== 'daily') return;
-    const member = data.find(d => d.id === index);
+    const member = data.find(d => String(d.id) === String(index));
     if (!member) return;
     member.notes = val;
     stampEdit(member);
@@ -3542,7 +3557,7 @@ async function supabaseSaveMemberPatch(member,patch){
   });}catch(e){syncWarn("PZ CLOUD PATCH FAILED",e);setSyncBadge("🔴 PZ Cloud Sync Failed");return null;}
 }
 async function supabaseIncrement(member,metric,delta){
-  const col=metric==="upgrade"?"pz":metric, patch={};
+  const col=metric==="upgrade"?"pz":(metric==="services"?"services":metric), patch={};
   patch[col]=Math.max(0,Number(member[col]||0)+Number(delta||0));
   try{return await pzWrite(member,patch);}catch(e){syncWarn("PZ CLOUD METRIC FAILED",e);setSyncBadge("🔴 PZ Cloud Sync Failed");return null;}
 }
@@ -3553,7 +3568,7 @@ async function supabaseResetDay(){
   if(!supabaseReady){alert("PZ Cloud Sync is not connected.");return false;}
   try{
     const {data:rows,error}=await supabaseClient.from(PZ_MEMBERS_TABLE).update({
-      checked_in:false,ac:0,pz:0,biz:0,acc:0,step:"",notes:"",
+      checked_in:false,ac:0,pz:0,services:0,biz:0,acc:0,step:"",notes:"",
       revision:Date.now(),updated_at:new Date().toISOString(),updated_by:CLIENT_ID
     }).eq("removed",false).select("*");
     if(error)throw error;
