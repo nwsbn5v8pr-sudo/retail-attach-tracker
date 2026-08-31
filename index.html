@@ -20,6 +20,8 @@ async function initSupabase() {
     setSyncBadge('⚠️ Cloud Sync Failed');
   }
 }
+
+initSupabaseSync();
 </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -1026,7 +1028,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     name: item.name,
     role: item.role,
     checkedIn: false,
-    ac: 0, upgrade: 0, services: 0, biz: 0, acc: 0,
+    ac: 0, pz: 0, biz: 0, acc: 0,
     step: '', notes: '', updatedAt: Date.now(), rev: 0, revBy: ''
   }));
 
@@ -3460,583 +3462,115 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   }
 }
 
+
 const SUPABASE_URL = "https://bkmpqjoqcilicmfahemg.supabase.co";
-  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_ss_a29uxD1FZWZ0at6uk_Q_a55sCjRg";
-  let supabaseClient = null;
-  let supabaseReady = false;
-  let supabaseHydrating = false;
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_ss_a29uxD1FZWZ0at6uk_Q_a55sCjRg";
+const PZ_MEMBERS_TABLE = "pz_focus_follow_members";
+const PZ_HISTORY_TABLE = "pz_focus_follow_history";
 
-  function dbRowToMember(row) {
-    return {
-      id: Number(row.id),
-      name: row.name || '',
-      role: row.role || 'Specialist',
-      checkedIn: !!row.checked_in,
-      ac: Number(row.ac || 0),
-      upgrade: Number(row.upgrade || 0),
-      services: Number(row.services || 0),
-      biz: Number(row.biz || 0),
-      acc: Number(row.acc || 0),
-      step: row.step || '',
-      notes: row.notes || '',
-      updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : 0,
-      rev: Number(row.revision || 0),
-      revBy: row.updated_by || ''
-    };
-  }
+let supabaseClient=null, supabaseReady=false, cloudChannel=null, cloudQueue=Promise.resolve();
 
-  function memberToDbRow(member) {
-    return {
-      id: String(member.id),
-      name: member.name,
-      role: member.role || 'Specialist',
-      checked_in: !!member.checkedIn,
-      ac: Number(member.ac || 0),
-      upgrade: Number(member.upgrade || 0),
-      services: Number(member.services || 0),
-      biz: Number(member.biz || 0),
-      acc: Number(member.acc || 0),
-      step: member.step || '',
-      notes: member.notes || '',
-      revision: Number(member.rev || 0),
-      updated_by: member.revBy || CLIENT_ID
-    };
-  }
+function pzCloudRow(m, patch={}) {
+  return Object.assign({
+    id:String(m.id), name:String(m.name||""), role:String(m.role||"Specialist"),
+    checked_in:!!m.checkedIn, ac:Number(m.ac||0), pz:Number(m.pz||m.upgrade||0),
+    biz:Number(m.biz||0), acc:Number(m.acc||0), step:String(m.step||""),
+    notes:String(m.notes||""), revision:Math.max(Date.now(),Number(m.rev||0)+1),
+    updated_at:new Date().toISOString(), updated_by:CLIENT_ID, removed:false,
+    shift_date:getTodayString()
+  },patch);
+}
+function pzFromCloud(r){
+  return {id:String(r.id),name:r.name||"",role:r.role||"Specialist",checkedIn:!!r.checked_in,
+    ac:Number(r.ac||0),pz:Number(r.pz||0),upgrade:Number(r.pz||0),biz:Number(r.biz||0),
+    acc:Number(r.acc||0),step:r.step||"",notes:r.notes||"",rev:Number(r.revision||0),
+    revBy:r.updated_by||"",updatedAt:r.updated_at?new Date(r.updated_at).getTime():Date.now()};
+}
+function pzUnique(list){
+  const map=new Map();
+  (list||[]).forEach(m=>{
+    if(!m||!m.id)return;
+    const k=String(m.id);
+    if(!map.has(k)||Number(m.rev||0)>=Number(map.get(k).rev||0))map.set(k,m);
+  });
+  return [...map.values()];
+}
+async function pzCloudLoad(){
+  const {data:rows,error}=await supabaseClient.from(PZ_MEMBERS_TABLE).select("*").eq("removed",false).order("id");
+  if(error)throw error;
+  if(rows&&rows.length)return pzUnique(rows.map(pzFromCloud));
+  const seed=roster.map((m,i)=>({id:"pz_"+i,name:m.name,role:m.role||"Specialist",
+    checked_in:false,ac:0,pz:0,biz:0,acc:0,step:"",notes:"",revision:0,
+    updated_at:new Date().toISOString(),updated_by:CLIENT_ID,removed:false,shift_date:getTodayString()}));
+  const {data:seeded,error:se}=await supabaseClient.from(PZ_MEMBERS_TABLE).upsert(seed,{onConflict:"id"}).select("*");
+  if(se)throw se;
+  return pzUnique((seeded||[]).map(pzFromCloud));
+}
+async function pzHydrate(){
+  setSyncBadge("☁️ Loading shared PZ tracker…");
+  data=await pzCloudLoad();
+  stateHydrated=true;
+  saveLocalState(); renderTableStructure(); updateTotals(); reorderRows();
+}
+function pzApply(row){
+  if(!row||row.removed)return;
+  const incoming=pzFromCloud(row), i=data.findIndex(m=>String(m.id)===String(incoming.id));
+  if(i<0)data.push(incoming);
+  else if(Number(incoming.rev)>=Number(data[i].rev||0))data[i]=incoming;
+  data=pzUnique(data); saveLocalState(); renderTableStructure(); updateTotals(); reorderRows();
+}
+function pzWrite(member,patch){
+  if(!supabaseReady) return Promise.reject(new Error("PZ Cloud Sync is not connected"));
+  const payload=pzCloudRow(member,patch);
+  cloudQueue=cloudQueue.then(async()=>{
+    const {data:row,error}=await supabaseClient.from(PZ_MEMBERS_TABLE)
+      .upsert(payload,{onConflict:"id"}).select("*").single();
+    if(error)throw error;
+    pzApply(row); return row;
+  });
+  return cloudQueue;
+}
+async function supabaseSaveMemberPatch(member,patch){
+  try{return await pzWrite(member,{
+    checked_in:patch.checkedIn===undefined?!!member.checkedIn:!!patch.checkedIn,
+    step:patch.step===undefined?String(member.step||""):String(patch.step||""),
+    notes:patch.notes===undefined?String(member.notes||""):String(patch.notes||"")
+  });}catch(e){syncWarn("PZ CLOUD PATCH FAILED",e);setSyncBadge("🔴 PZ Cloud Sync Failed");return null;}
+}
+async function supabaseIncrement(member,metric,delta){
+  const col=metric==="upgrade"?"pz":metric, patch={};
+  patch[col]=Math.max(0,Number(member[col]||0)+Number(delta||0));
+  try{return await pzWrite(member,patch);}catch(e){syncWarn("PZ CLOUD METRIC FAILED",e);setSyncBadge("🔴 PZ Cloud Sync Failed");return null;}
+}
+async function supabaseAddMember(member){
+  try{return await pzWrite(member,{});}catch(e){syncWarn("PZ CLOUD ADD FAILED",e);return null;}
+}
+async function supabaseResetDay(){
+  if(!supabaseReady){alert("PZ Cloud Sync is not connected.");return false;}
+  try{
+    const {data:rows,error}=await supabaseClient.from(PZ_MEMBERS_TABLE).update({
+      checked_in:false,ac:0,pz:0,biz:0,acc:0,step:"",notes:"",
+      revision:Date.now(),updated_at:new Date().toISOString(),updated_by:CLIENT_ID
+    }).eq("removed",false).select("*");
+    if(error)throw error;
+    data=pzUnique((rows||[]).map(pzFromCloud)); saveLocalState();
+    renderTableStructure();updateTotals();reorderRows();
+    setSyncBadge("🧹 PZ Cloud Reset — all iPads cleared"); return true;
+  }catch(e){alert("PZ Cloud Reset failed: "+(e.message||e));return false;}
+}
+async function initSupabaseSync(){
+  if(supabaseReady)return;
+  try{
+    if(!window.supabase||!window.supabase.createClient)throw new Error("Supabase library failed to load");
+    supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,
+      {auth:{persistSession:false,autoRefreshToken:false}});
+    await pzHydrate(); supabaseReady=true;
+    cloudChannel=supabaseClient.channel("pz-focus-follow-central")
+      .on("postgres_changes",{event:"*",schema:"public",table:PZ_MEMBERS_TABLE},payload=>{
+        if(payload.eventType!=="DELETE"&&payload.new)pzApply(payload.new);
+      }).subscribe(status=>{if(status==="SUBSCRIBED")setSyncBadge("🟢 PZ Cloud Sync Active");});
+    setSyncBadge("🟢 PZ Cloud Sync Active");
+  }catch(e){supabaseReady=false;console.error("PZ CLOUD INIT FAILED",e);setSyncBadge("🔴 PZ Cloud Sync Failed");}
+}
 
-  function applyDbMember(row) {
-    const incoming = dbRowToMember(row);
-    let local = data.find(d => String(d.id) === String(incoming.id));
-    if (!local) {
-      data.push(incoming);
-      if (!INITIAL_ROSTER.some(m => m.name === incoming.name)) {
-        INITIAL_ROSTER.push({name: incoming.name, role: incoming.role});
-      }
-    } else {
-      const idx = data.indexOf(local);
-      data[idx] = Object.assign({}, local, incoming);
-    }
-    observeRev(incoming.rev);
-  }
-
-  async function supabaseFetchLive() {
-    const {data: rows, error} = await supabaseClient
-      .from('gb_tracker_members')
-      .select('*')
-      .eq('removed', false)
-      .order('id');
-    if (error) throw error;
-
-    // Empty database = first installation. Seed ONLY in this case.
-    // Never seed from localStorage when rows already exist.
-    if (!rows || rows.length === 0) {
-      const seed = INITIAL_ROSTER.map((m, idx) => ({
-        id: String(idx),
-        name: m.name,
-        role: m.role,
-        checked_in: false,
-        ac: 0, upgrade: 0, services: 0, biz: 0, acc: 0,
-        step: '', notes: '', revision: 0, updated_by: 'seed'
-      }));
-      const {data: seeded, error: seedErr} = await supabaseClient
-        .from('gb_tracker_members').upsert(seed, {onConflict:'id'}).select('*');
-      if (seedErr) throw seedErr;
-      (seeded || []).forEach(applyDbMember);
-      return;
-    }
-
-    // CENTRAL AUTHORITY: replace live data with the database's current rows.
-    const unique = new Map();
-    (rows || []).forEach(row => {
-      const member = dbRowToMember(row);
-      const key = String(member.id || member.name).toLowerCase();
-      if (!unique.has(key) || Number(member.rev || 0) >= Number(unique.get(key).rev || 0)) {
-        unique.set(key, member);
-      }
-    });
-    data = Array.from(unique.values()).filter(m => !isMemberTombstoned(m.id));
-    INITIAL_ROSTER.length = 0;
-    const rosterSeen = new Set();
-    data.forEach(m => {
-      const key = String(m.name || '').toLowerCase();
-      if (rosterSeen.has(key)) return;
-      rosterSeen.add(key);
-      INITIAL_ROSTER.push({name:m.name, role:m.role});
-      observeRev(m.rev);
-    });
-    renderTableStructure();
-    updateTotals();
-    scheduleReorder();
-    stateHydrated = true;
-  }
-
-  async function supabaseSaveMemberPatch(member, patch) {
-    if (!supabaseReady || !supabaseClient) {
-      markPending(member.name);
-      return null;
-    }
-    const {data: row, error} = await supabaseClient.rpc('gb_tracker_patch_member', {
-      p_id: String(member.id),
-      p_checked_in: patch.checkedIn === undefined ? null : !!patch.checkedIn,
-      p_step: patch.step === undefined ? null : String(patch.step || ''),
-      p_notes: patch.notes === undefined ? null : String(patch.notes || ''),
-      p_client_id: CLIENT_ID
-    });
-    if (error) {
-      markPending(member.name);
-      syncWarn('SUPABASE PATCH FAILED', error);
-      return null;
-    }
-    const result = Array.isArray(row) ? row[0] : row;
-    if (result) {
-      applyDbMember(result);
-      saveLocalState();
-      renderRow(member.id);
-      renderCheckInVisual(member.id);
-      updateTotals();
-    }
-    pendingMembers.delete(member.name);
-    savePendingMembers();
-    return result;
-  }
-
-  async function supabaseIncrement(member, metric, delta) {
-    if (!supabaseReady || !supabaseClient) {
-      markPending(member.name);
-      return null;
-    }
-    const {data: row, error} = await supabaseClient.rpc('gb_tracker_increment_metric', {
-      p_id: String(member.id),
-      p_metric: metric,
-      p_delta: Number(delta),
-      p_client_id: CLIENT_ID
-    });
-    if (error) {
-      markPending(member.name);
-      syncWarn('SUPABASE INCREMENT FAILED', error);
-      return null;
-    }
-    const result = Array.isArray(row) ? row[0] : row;
-    if (result) {
-      applyDbMember(result);
-      saveLocalState();
-      renderRow(member.id);
-      renderCheckInVisual(member.id);
-      updateTotals();
-      reorderRows();
-    }
-    pendingMembers.delete(member.name);
-    savePendingMembers();
-    return result;
-  }
-
-  async function supabaseAddMember(member) {
-    if (!supabaseReady) {
-      markPending(member.name);
-      return;
-    }
-    const {data: row, error} = await supabaseClient
-      .from('gb_tracker_members')
-      .upsert(memberToDbRow(member), {onConflict:'id'})
-      .select('*').single();
-    if (error) {
-      syncWarn('SUPABASE ADD FAILED', error);
-      markPending(member.name);
-      return;
-    }
-    applyDbMember(row);
-    saveLocalState();
-    renderTableStructure();
-    updateTotals();
-    reorderRows();
-  }
-
-  async function supabaseResetDay() {
-    if (!supabaseReady || !supabaseClient) {
-      alert('Cloud sync is not connected. Reset Day was not applied.');
-      return false;
-    }
-
-    const resetTs = Date.now();
-    const today = getTodayString();
-
-    try {
-      // IMPORTANT: do not depend on a custom Supabase RPC here. The previous
-      // version called gb_tracker_reset_day(), but that function is not present
-      // in the project, which caused "Cloud Reset Day failed".
-      //
-      // First archive today's live board so Reset Day never destroys today's
-      // history.
-      const snapshot = {
-        date: today,
-        timestamp: resetTs,
-        data: JSON.parse(JSON.stringify(data))
-      };
-      await saveHistoryToSupabase(snapshot);
-
-      // Reset every live member directly in the central table. Realtime
-      // subscriptions on gb_tracker_members then deliver the cleared rows to
-      // every connected iPad.
-      const resetRevision = Math.max(Number(lastVersion || 0), resetTs);
-
-      const { data: resetRows, error: resetError } = await supabaseClient
-        .from('gb_tracker_members')
-        .update({
-          checked_in: false,
-          ac: 0,
-          upgrade: 0,
-          services: 0,
-          biz: 0,
-          acc: 0,
-          step: '',
-          notes: '',
-          revision: resetRevision,
-          updated_by: CLIENT_ID
-        })
-        .eq('removed', false)
-        .select('*');
-
-      if (resetError) {
-        syncWarn('SUPABASE RESET FAILED', resetError);
-        alert('Cloud Reset Day failed: ' + (resetError.message || 'database update failed'));
-        return false;
-      }
-
-      if (!Array.isArray(resetRows) || resetRows.length === 0) {
-        syncWarn('SUPABASE RESET FAILED', 'No active member rows were updated');
-        alert('Cloud Reset Day failed: no active devices/members were found.');
-        return false;
-      }
-
-      // Apply the authoritative cleared rows locally as well. This guarantees
-      // the initiating iPad resets even if its realtime subscription is delayed.
-      data = resetRows.map(dbRowToMember);
-      data.forEach(observeRev);
-
-      lastVersion = resetRevision;
-      try {
-        localStorage.setItem('pz_room_reset_day', today);
-        localStorage.setItem('pz_room_reset_ts', String(resetTs));
-        localStorage.setItem('pz_room_reset_id',
-          CLIENT_ID + '_dbreset_' + resetTs);
-        localStorage.setItem(STORAGE_KEY_LIVE_DAY, today);
-      } catch(e) {}
-
-      clearPending();
-      pendingBroadcast = false;
-      lastOutboundFingerprint = '';
-
-      saveLocalState();
-      renderTableStructure();
-      updateTotals();
-      reorderRows();
-      if (typeof renderTopPerformersPodium === 'function') {
-        renderTopPerformersPodium();
-      }
-
-      setSyncBadge(`🧹 Cloud Reset — ${resetRows.length} members cleared`);
-      syncLog('SUPABASE RESET SUCCESS', {
-        date: today,
-        rowsReset: resetRows.length,
-        historyPreserved: true,
-        resetBy: CLIENT_ID
-      });
-      return true;
-    } catch (e) {
-      syncWarn('SUPABASE RESET EXCEPTION', e && e.message ? e.message : e);
-      alert('Cloud Reset Day failed: ' + (e && e.message ? e.message : 'unexpected error'));
-      return false;
-    }
-  }
-
-  async function loadSupabaseHistory() {
-    const {data: rows, error} = await supabaseClient
-      .from('gb_tracker_history')
-      .select('*')
-      .order('history_date', {ascending:false});
-    if (error) {
-      syncWarn('SUPABASE HISTORY LOAD FAILED', error);
-      return;
-    }
-    if (Array.isArray(rows) && rows.length) {
-      historyRecords = rows.map(r => ({
-        date: r.history_date,
-        timestamp: new Date(r.updated_at || r.created_at || Date.now()).getTime(),
-        data: r.snapshot || []
-      }));
-      saveLocalState();
-    }
-  }
-
-  async function saveHistoryToSupabase(snapshot) {
-    if (!supabaseReady) return;
-    const {error} = await supabaseClient.from('gb_tracker_history').upsert({
-      history_date: snapshot.date,
-      snapshot: snapshot.data,
-      updated_at: new Date().toISOString()
-    }, {onConflict:'history_date'});
-    if (error) syncWarn('SUPABASE HISTORY SAVE FAILED', error);
-  }
-
-  async function initSupabaseSync() {
-    try {
-      if (!window.supabase || !window.supabase.createClient) {
-        throw new Error('Supabase client library failed to load');
-      }
-      supabaseClient = window.supabase.createClient(
-        SUPABASE_URL,
-        SUPABASE_PUBLISHABLE_KEY
-      );
-
-      setSyncBadge('☁️ Connecting to central database…');
-
-      // Load the cloud FIRST. A local iPad copy can never initialize an
-      // already-populated cloud database.
-      supabaseHydrating = true;
-      await supabaseFetchLive();
-      await loadSupabaseHistory();
-      supabaseHydrating = false;
-      supabaseReady = true;
-      stateHydrated = true;
-
-      renderTableStructure();
-      updateTotals();
-      reorderRows();
-      setSyncBadge('🟢 Central Cloud Sync Active');
-
-      // Every database change is pushed to every connected iPad.
-      supabaseClient
-        .channel('pz-focus-follow-live')
-        .on('postgres_changes',
-          {event:'*', schema:'public', table:'gb_tracker_members'},
-          payload => {
-            if (!payload || !payload.new || payload.new.removed) return;
-            applyDbMember(payload.new);
-            saveLocalState();
-            renderTableStructure();
-            updateTotals();
-            reorderRows();
-            setSyncBadge('🟢 Central Cloud Sync Active');
-          })
-        .on('postgres_changes',
-          {event:'*', schema:'public', table:'gb_tracker_history'},
-          payload => {
-            if (!payload || !payload.new) return;
-            const r = payload.new;
-            const rec = {
-              date: r.history_date,
-              timestamp: new Date(r.updated_at || r.created_at || Date.now()).getTime(),
-              data: r.snapshot || []
-            };
-            const idx = historyRecords.findIndex(x => x.date === rec.date);
-            if (idx >= 0) historyRecords[idx] = rec;
-            else historyRecords.unshift(rec);
-            saveLocalState();
-            if (currentTab === 'history') renderHistoryList();
-          })
-        .subscribe(status => {
-          syncLog('SUPABASE REALTIME', status);
-          if (status === 'SUBSCRIBED') setSyncBadge('🟢 Central Cloud Sync Active');
-        });
-
-      // Retry any edits that happened before cloud hydration completed.
-      const pending = Array.from(pendingMembers);
-      for (const name of pending) {
-        const m = data.find(x => x.name === name);
-        if (m) await supabaseSaveMemberPatch(m, {
-          checkedIn:m.checkedIn, step:m.step, notes:m.notes
-        });
-      }
-      clearPending();
-    } catch (e) {
-      supabaseReady = false;
-      supabaseHydrating = false;
-      syncWarn('SUPABASE INIT FAILED', e);
-      setSyncBadge('⚠️ Cloud unavailable — local safety copy only');
-    }
-  }
-
-  // In central-cloud mode, this legacy function NEVER sends a full roster.
-  // Keeping it harmless protects older call sites in the tracker.
-  function broadcastChange() {
-    saveLocalState();
-  }
-
-  // Override the counter action with an atomic database operation.
-  async function updateCounts(index, metric, delta) {
-    if (currentTab !== 'daily') return;
-    const member = data.find(d => d.id === index);
-    if (!member) return;
-
-    pushUndoSnapshot();
-
-    if (supabaseReady) {
-      // Do not locally manufacture the next total. The database performs the
-      // increment atomically, which prevents two iPads from losing a tap.
-      await supabaseIncrement(member, metric, delta);
-      renderTopPerformersPodium();
-      return;
-    }
-
-    // Offline fallback: retain existing local behavior.
-    member[metric] = Math.max(0, member[metric] + delta);
-    stampEdit(member);
-    if (member[metric] > 0 && !member.checkedIn) member.checkedIn = true;
-    saveLocalState();
-    renderTableStructure();
-    updateTotals();
-    reorderRows();
-  }
-
-  async function saveStep(index, val) {
-    if (currentTab !== 'daily') return;
-    const member = data.find(d => d.id === index);
-    if (!member) return;
-    pushUndoSnapshot();
-
-    if (supabaseReady) {
-      await supabaseSaveMemberPatch(member, {step: val});
-      return;
-    }
-    member.step = val;
-    stampEdit(member);
-    saveLocalState();
-  }
-
-  async function saveNote(index, val) {
-    if (currentTab !== 'daily') return;
-    const member = data.find(d => d.id === index);
-    if (!member) return;
-
-    if (supabaseReady) {
-      await supabaseSaveMemberPatch(member, {notes: val});
-      return;
-    }
-    member.notes = val;
-    stampEdit(member);
-    saveLocalState();
-  }
-
-  async function toggleCheckIn(index) {
-    if (currentTab !== 'daily') return;
-    const member = data.find(d => d.id === index);
-    if (!member) return;
-    pushUndoSnapshot();
-
-    const next = !member.checkedIn;
-    if (supabaseReady) {
-      await supabaseSaveMemberPatch(member, {checkedIn: next});
-      reorderRows();
-      return;
-    }
-    member.checkedIn = next;
-    stampEdit(member);
-    saveLocalState();
-    renderCheckInVisual(index);
-    updateTotals();
-    reorderRows();
-  }
-
-  async function checkAll(status) {
-    if (currentTab !== 'daily') return;
-    pushUndoSnapshot();
-    if (supabaseReady) {
-      for (const member of [...data]) {
-        await supabaseSaveMemberPatch(member, {checkedIn: !!status});
-      }
-      renderTableStructure();
-      updateTotals();
-      reorderRows();
-      return;
-    }
-    data.forEach(d => { d.checkedIn = status; stampEdit(d); });
-    saveLocalState();
-    renderTableStructure();
-    updateTotals();
-    reorderRows();
-  }
-
-  async function promptAddTeamMember() {
-    const name = prompt("Enter team member's full name:");
-    if (!name || !name.trim()) return;
-    const trimmedName = name.trim();
-    if (data.some(d => d.name.toLowerCase() === trimmedName.toLowerCase())) {
-      alert(`⚠️ "${trimmedName}" is already on the roster.`);
-      return;
-    }
-    const roles = ["Specialist","Expert","Creative","Creative Pro","Business Pro",
-      "Business Expert","Pro","Tech and Merch Pro","POP"];
-    const roleChoice = prompt(
-      `Enter role for ${trimmedName}:\n\n` +
-      roles.map((r,i) => `${i+1}. ${r}`).join("\n"), "1");
-    if (roleChoice === null) return;
-
-    let role = "Specialist";
-    const idx = parseInt(roleChoice,10)-1;
-    if (!isNaN(idx) && idx >= 0 && idx < roles.length) role = roles[idx];
-    else if (roleChoice.trim()) role = roleChoice.trim();
-
-    pushUndoSnapshot();
-    const newId = data.length ? Math.max(...data.map(d => Number(d.id))) + 1 : 0;
-    const member = {
-      id:newId, name:trimmedName, role:role, checkedIn:true,
-      ac:0, upgrade:0, services:0, biz:0, acc:0, step:"", notes:"",
-      updatedAt:Date.now(), rev:0, revBy:CLIENT_ID
-    };
-
-    if (supabaseReady) {
-      await supabaseAddMember(member);
-    } else {
-      data.push(member);
-      INITIAL_ROSTER.push({name:trimmedName, role:role});
-      saveLocalState();
-      renderTableStructure(); updateTotals(); reorderRows();
-    }
-    flashAutoSaveBadge(`✅ Added ${trimmedName}`);
-  }
-
-  async function resetCounts() {
-    if (!confirm(
-      "RESET TODAY'S LIVE TRACKER ON ALL IPADS?\n\n" +
-      "This will clear today's check-ins, metrics, steps, and notes on every " +
-      "connected/reconnecting iPad.\n\n" +
-      "Historical / previous-day records will NOT be deleted."
-    )) return;
-    await supabaseResetDay();
-  }
-
-  // Save a history snapshot to both the local safety cache and the central DB.
-  const _localSaveCurrentDay = saveCurrentDay;
-  saveCurrentDay = async function(silent = false, targetDate = null) {
-    const today = targetDate || getTodayString();
-    const snapshot = {
-      date: today,
-      timestamp: Date.now(),
-      data: JSON.parse(JSON.stringify(data))
-    };
-    const existingIdx = historyRecords.findIndex(r => r.date === today);
-    if (existingIdx >= 0) historyRecords[existingIdx] = snapshot;
-    else historyRecords.unshift(snapshot);
-    saveLocalState();
-    if (supabaseReady) await saveHistoryToSupabase(snapshot);
-    if (!silent) {
-      alert(`✅ Today's data (${today}) saved successfully!`);
-    } else {
-      flashAutoSaveBadge(`✅ Saved (${today})`);
-    }
-  };
-
-  // Initialize
-
-  renderTableStructure();
-  updateSortHeaderIcons();
-  updateTotals();
-  reorderRows();
-  initSupabaseSync();
-  setupAutoEngines();
-
-initSupabase();
-
-window.addEventListener('load', function(){ setTimeout(function(){ if(typeof initSupabase==='function') initSupabase(); }, 50); });
 </script>
-</body>
-</html>
