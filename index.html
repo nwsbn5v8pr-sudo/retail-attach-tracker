@@ -3660,18 +3660,26 @@ function pzUnique(list){
   return [...map.values()].filter(function(m){ return String(m.id)!=='NaN'; });
 }
 async function pzCloudLoad(){
-  const {data:rows,error}=await supabaseClient.from(PZ_MEMBERS_TABLE)
-    .select("*").eq("removed",false).order("id");
+  const {data:rows,error}=await supabaseClient
+    .from(PZ_MEMBERS_TABLE)
+    .select("*")
+    .eq("removed",false)
+    .order("id");
   if(error) throw error;
 
   const cloudRows=Array.isArray(rows)?rows:[];
-  const cloudById=new Map(cloudRows.map(r=>[String(r.id),r]));
+  const activeByName=new Map(
+    cloudRows.map(r=>[String(r.name||"").trim().toLowerCase(),r])
+  );
+
+  // Reconcile the approved embedded roster by NAME, without inventing a
+  // second ID for members whose cloud ID differs.
   const missing=roster.map(function(m){
-    const id="roster_"+String(m.name||"").toLowerCase()
-      .replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
-    if(cloudById.has(id)) return null;
+    const name=String(m.name||"").trim();
+    if(activeByName.has(name.toLowerCase())) return null;
     return {
-      id:id,name:m.name,role:m.role||"Specialist",checked_in:false,
+      id:"roster_"+name.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,""),
+      name:name,role:m.role||"Specialist",checked_in:false,
       ac:0,pz:0,services:0,biz:0,acc:0,step:"",notes:"",revision:0,
       updated_at:new Date().toISOString(),updated_by:CLIENT_ID,
       removed:false,shift_date:getTodayString()
@@ -3680,10 +3688,11 @@ async function pzCloudLoad(){
 
   if(missing.length){
     const {data:added,error:addErr}=await supabaseClient
-      .from(PZ_MEMBERS_TABLE).upsert(missing,{onConflict:"id"}).select("*");
+      .from(PZ_MEMBERS_TABLE).insert(missing).select("*");
     if(addErr) throw addErr;
     cloudRows.push(...(added||[]));
   }
+
   return pzUnique(cloudRows.map(pzFromCloud));
 }
 async function pzHydrate(){
@@ -3750,36 +3759,83 @@ async function supabaseResetDay(){
     setSyncBadge("🧹 PZ Cloud Reset — all iPads cleared"); return true;
   }catch(e){alert("PZ Cloud Reset failed: "+(e.message||e));return false;}
 }
-async function initSupabaseSync(){
-  if(supabaseReady)return;
-  try{
-    if(!window.supabase||!window.supabase.createClient)throw new Error("Supabase library failed to load");
-    supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,
-      {auth:{persistSession:false,autoRefreshToken:false}});
-    await pzHydrate(); supabaseReady=true;
-    cloudChannel=supabaseClient.channel("pz-focus-follow-central", {
-        config: { broadcast: { self: false }, presence: { key: CLIENT_ID } }
-      })
-      .on("postgres_changes",
-        {event:"INSERT",schema:"public",table:PZ_MEMBERS_TABLE},
-        payload=>{ if(payload.new) pzApply(payload.new); })
-      .on("postgres_changes",
-        {event:"UPDATE",schema:"public",table:PZ_MEMBERS_TABLE},
-        payload=>{ if(payload.new) pzApply(payload.new); })
-      .subscribe(status=>{
-        if(status==="SUBSCRIBED") {
-          setSyncBadge("🟢 PZ Cloud Sync Active");
-          console.log("PZ realtime subscribed");
-        } else if(status==="CHANNEL_ERROR" || status==="TIMED_OUT") {
-          setSyncBadge("🟡 PZ Cloud Realtime Reconnecting…");
-        }
-      });
-    setSyncBadge("🟢 PZ Cloud Sync Active");
-  }catch(e){supabaseReady=false;console.error("PZ CLOUD INIT FAILED",e);setSyncBadge("🔴 PZ Cloud Sync Failed");}
+async function waitForSupabaseLibrary(timeoutMs=15000){
+  const started=Date.now();
+  while(Date.now()-started<timeoutMs){
+    if(window.supabase && typeof window.supabase.createClient==="function") return true;
+    await new Promise(r=>setTimeout(r,100));
+  }
+  return false;
 }
 
+async function initSupabaseSync(){
+  if(supabaseReady) return true;
+  setSyncBadge("☁️ Connecting PZ Cloud…");
 
-window.addEventListener('load', function(){ setTimeout(function(){ initSupabaseSync(); }, 100); });
+  try{
+    const loaded=await waitForSupabaseLibrary();
+    if(!loaded) throw new Error("Supabase library did not load. Check the iPad internet connection.");
+
+    if(!supabaseClient){
+      supabaseClient=window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_PUBLISHABLE_KEY,
+        {auth:{persistSession:false,autoRefreshToken:false}}
+      );
+    }
+
+    // Real connectivity + permissions test before claiming the cloud is active.
+    const health=await supabaseClient
+      .from(PZ_MEMBERS_TABLE)
+      .select("id", {count:"exact",head:true});
+    if(health.error) throw new Error("PZ database connection failed: "+health.error.message);
+
+    await pzHydrate();
+    stateHydrated=true;
+    supabaseReady=true;
+
+    if(cloudChannel) await supabaseClient.removeChannel(cloudChannel);
+    cloudChannel=supabaseClient.channel("pz-focus-follow-central",{
+      config:{broadcast:{self:false},presence:{key:CLIENT_ID}}
+    })
+    .on("postgres_changes",
+      {event:"INSERT",schema:"public",table:PZ_MEMBERS_TABLE},
+      payload=>{if(payload.new)pzApply(payload.new);})
+    .on("postgres_changes",
+      {event:"UPDATE",schema:"public",table:PZ_MEMBERS_TABLE},
+      payload=>{if(payload.new)pzApply(payload.new);})
+    .on("postgres_changes",
+      {event:"DELETE",schema:"public",table:PZ_MEMBERS_TABLE},
+      payload=>{if(payload.old)pzApply(Object.assign({},payload.old,{removed:true}));})
+    .subscribe(status=>{
+      if(status==="SUBSCRIBED"){
+        setSyncBadge("🟢 PZ Cloud Sync Active");
+      }else if(status==="CHANNEL_ERROR"||status==="TIMED_OUT"){
+        setSyncBadge("🟡 PZ Cloud Realtime Reconnecting…");
+      }
+    });
+
+    setSyncBadge("🟢 PZ Cloud Sync Active");
+    return true;
+  }catch(e){
+    supabaseReady=false;
+    console.error("PZ CLOUD INIT FAILED",e);
+    setSyncBadge("🔴 PZ Cloud Sync Failed");
+    const detail=e && e.message ? e.message : String(e);
+    // Keep the tracker usable locally, but expose the real reason.
+    setTimeout(()=>console.warn("PZ CLOUD ERROR:",detail),0);
+    return false;
+  }
+}
+
+window.addEventListener('load', function(){
+  setTimeout(function(){
+    initSupabaseSync();
+    setInterval(function(){
+      if(!supabaseReady && navigator.onLine) initSupabaseSync();
+    },5000);
+  },250);
+});
 
 window.addEventListener('load', function(){ pzEnforcePassword(); pzStartHourlyPasswordCheck(); });
 </script>
