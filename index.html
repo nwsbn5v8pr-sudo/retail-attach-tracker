@@ -2226,6 +2226,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     if (!member) return;
     pushUndoSnapshot();
     member.step = val;
+    pendingStepByMember.set(String(member.id), String(val||""));
     stampEdit(member);
     broadcastChange();
     if (currentSort.column === 'step') {
@@ -3671,6 +3672,7 @@ const PZ_MEMBERS_TABLE = "pz_focus_follow_members";
 const PZ_HISTORY_TABLE = "pz_focus_follow_history";
 
 let supabaseClient=null, supabaseReady=false, cloudChannel=null, cloudQueue=Promise.resolve();
+const pendingStepByMember = new Map();
 
 function pzCloudRow(m, patch={}) {
   return Object.assign({
@@ -3741,6 +3743,10 @@ function pzApply(row){
     data=data.filter(function(m){ return String(m.id)!==id; });
   }else{
     const incoming=pzFromCloud(row);
+    const pendingStep=pendingStepByMember.get(id);
+    if(pendingStep !== undefined && incoming.step !== pendingStep){
+      incoming.step=pendingStep;
+    }
     const i=data.findIndex(function(m){ return String(m.id)===id; });
     if(i<0) data.push(incoming);
     else if(Number(incoming.rev)>=Number(data[i].rev||0)) data[i]=incoming;
@@ -3772,15 +3778,29 @@ function pzWrite(member,patch){
   return cloudQueue;
 }
 async function supabaseSaveMemberPatch(member,patch){
-  try{return await pzWrite(member,{
-    checked_in:patch.checkedIn===undefined?!!member.checkedIn:!!patch.checkedIn,
-    step:patch.step===undefined?String(member.step||""):String(patch.step||""),
-    notes:patch.notes===undefined?String(member.notes||""):String(patch.notes||"")
-  });}catch(e){syncWarn("PZ CLOUD PATCH FAILED",e);setSyncBadge("🔴 PZ Cloud Sync Failed");return null;}
+  try{
+    const row=await pzWrite(member,{
+      checked_in:patch.checkedIn===undefined?!!member.checkedIn:!!patch.checkedIn,
+      step:patch.step===undefined?String(member.step||""):String(patch.step||""),
+      notes:patch.notes===undefined?String(member.notes||""):String(patch.notes||"")
+    });
+    const key=String(member.id);
+    const pendingStep=pendingStepByMember.get(key);
+    if(row && pendingStep !== undefined && String(row.step||"") === pendingStep){
+      pendingStepByMember.delete(key);
+    }
+    return row;
+  }catch(e){syncWarn("PZ CLOUD PATCH FAILED",e);setSyncBadge("🔴 PZ Cloud Sync Failed");return null;}
 }
 async function supabaseIncrement(member,metric,delta){
+  // updateCounts() already changes the member locally. Never add delta again.
   const col=metric==="upgrade"?"pz":(metric==="services"?"services":metric), patch={};
-  patch[col]=Math.max(0,Number(member[col]||0)+Number(delta||0));
+  patch[col]=Math.max(0,Number(member[metric]||0));
+  // Carry the current editable state with the metric write so a metric tap
+  // cannot restore an older blank Apple Step or check-in state.
+  patch.checked_in=!!member.checkedIn;
+  patch.step=String(member.step||"");
+  patch.notes=String(member.notes||"");
   try{return await pzWrite(member,patch);}catch(e){syncWarn("PZ CLOUD METRIC FAILED",e);setSyncBadge("🔴 PZ Cloud Sync Failed");return null;}
 }
 async function supabaseAddMember(member){
