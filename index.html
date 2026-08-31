@@ -1005,22 +1005,12 @@
 
   // Live active shift data
   let data = INITIAL_ROSTER.map((item, idx) => ({
-    id: idx,
+    id: 'roster_' + String(item.name).toLowerCase().replace(/[^a-z0-9]+/g,'_'),
     name: item.name,
     role: item.role,
     checkedIn: false,
-    ac: 0,
-    upgrade: 0,
-    services: 0,
-    biz: 0,
-    acc: 0,
-    step: "",
-    notes: "",
-    updatedAt: 0,
-    rev: 0,
-    revBy: "",
-    deleted: false,
-    memberDeleted: false
+    ac: 0, upgrade: 0, services: 0, biz: 0, acc: 0,
+    step: '', notes: '', updatedAt: Date.now(), rev: 0, revBy: ''
   }));
 
   // Historical archived daily shifts
@@ -1883,6 +1873,14 @@
   }
 
   function renderTableStructure() {
+    const seenRenderIds = new Set();
+    data = data.filter(m => {
+      const key = String(m.id != null ? m.id : m.name);
+      if (seenRenderIds.has(key)) return false;
+      seenRenderIds.add(key);
+      return true;
+    });
+
     normalizeDisplayNames();
     if (isEditingNote()) return;
     const tbody = document.getElementById('tableBody');
@@ -3510,23 +3508,27 @@
     }
 
     // CENTRAL AUTHORITY: replace live data with the database's current rows.
-    const uniqueRows = [];
-    const seenIds = new Set();
+    const unique = new Map();
     (rows || []).forEach(row => {
-      const key = String(row.id);
-      if (seenIds.has(key)) return;
-      seenIds.add(key);
-      uniqueRows.push(row);
+      const member = dbRowToMember(row);
+      const key = String(member.id || member.name).toLowerCase();
+      if (!unique.has(key) || Number(member.rev || 0) >= Number(unique.get(key).rev || 0)) {
+        unique.set(key, member);
+      }
     });
-    data = uniqueRows.map(dbRowToMember);
+    data = Array.from(unique.values()).filter(m => !isMemberTombstoned(m.id));
     INITIAL_ROSTER.length = 0;
-    const seenRosterNames = new Set();
+    const rosterSeen = new Set();
     data.forEach(m => {
-      if (seenRosterNames.has(m.name)) return;
-      seenRosterNames.add(m.name);
+      const key = String(m.name || '').toLowerCase();
+      if (rosterSeen.has(key)) return;
+      rosterSeen.add(key);
       INITIAL_ROSTER.push({name:m.name, role:m.role});
+      observeRev(m.rev);
     });
-    data.forEach(m => observeRev(m.rev));
+    renderTableStructure();
+    updateTotals();
+    scheduleReorder();
     stateHydrated = true;
   }
 
