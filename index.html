@@ -3629,6 +3629,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
 
 const SUPABASE_URL = "https://bkmpqjoqcilicmfahemg.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_ss_a29uxD1FZWZ0at6uk_Q_a55sCjRg";
+const SUPABASE_LEGACY_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJrbXBxam9xY2lsaWNtZmFoZW1nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3MTAyNjksImV4cCI6MjEwMzI4NjI2OX0.JaM8Z1P16oIgjMjoORaG864gwmIZ1g8cbkF3GFf-o_Q";
 const PZ_MEMBERS_TABLE = "pz_focus_follow_members";
 const PZ_HISTORY_TABLE = "pz_focus_follow_history";
 
@@ -3660,20 +3661,15 @@ function pzUnique(list){
   return [...map.values()].filter(function(m){ return String(m.id)!=='NaN'; });
 }
 async function pzCloudLoad(){
-  const {data:rows,error}=await supabaseClient
-    .from(PZ_MEMBERS_TABLE)
-    .select("*")
-    .eq("removed",false)
-    .order("id");
-  if(error) throw error;
-
+  const key=window.PZ_WORKING_API_KEY||SUPABASE_PUBLISHABLE_KEY;
+  const rows=await pzRestRequest(
+    PZ_MEMBERS_TABLE+"?select=*&removed=eq.false&order=id",{},key
+  );
   const cloudRows=Array.isArray(rows)?rows:[];
   const activeByName=new Map(
     cloudRows.map(r=>[String(r.name||"").trim().toLowerCase(),r])
   );
 
-  // Reconcile the approved embedded roster by NAME, without inventing a
-  // second ID for members whose cloud ID differs.
   const missing=roster.map(function(m){
     const name=String(m.name||"").trim();
     if(activeByName.has(name.toLowerCase())) return null;
@@ -3687,12 +3683,12 @@ async function pzCloudLoad(){
   }).filter(Boolean);
 
   if(missing.length){
-    const {data:added,error:addErr}=await supabaseClient
-      .from(PZ_MEMBERS_TABLE).insert(missing).select("*");
-    if(addErr) throw addErr;
-    cloudRows.push(...(added||[]));
+    const added=await pzRestRequest(
+      PZ_MEMBERS_TABLE+"?on_conflict=id",
+      {method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=representation"},
+       body:JSON.stringify(missing)},key);
+    cloudRows.push(...(Array.isArray(added)?added:[]));
   }
-
   return pzUnique(cloudRows.map(pzFromCloud));
 }
 async function pzHydrate(){
@@ -3723,11 +3719,18 @@ function pzApply(row){
 function pzWrite(member,patch){
   if(!supabaseReady) return Promise.reject(new Error("PZ Cloud Sync is not connected"));
   const payload=pzCloudRow(member,patch);
+  const key=window.PZ_WORKING_API_KEY||SUPABASE_PUBLISHABLE_KEY;
+
   cloudQueue=cloudQueue.then(async()=>{
-    const {data:row,error}=await supabaseClient.from(PZ_MEMBERS_TABLE)
-      .upsert(payload,{onConflict:"id"}).select("*").single();
-    if(error)throw error;
-    pzApply(row); return row;
+    // REST upsert is the primary persistence path.
+    const rows=await pzRestRequest(
+      PZ_MEMBERS_TABLE+"?on_conflict=id",
+      {method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=representation"},
+       body:JSON.stringify(payload)},key);
+    const row=Array.isArray(rows)?rows[0]:rows;
+    if(!row) throw new Error("Supabase did not return the saved PZ member.");
+    pzApply(row);
+    return row;
   });
   return cloudQueue;
 }
@@ -3749,23 +3752,53 @@ async function supabaseAddMember(member){
 async function supabaseResetDay(){
   if(!supabaseReady){alert("PZ Cloud Sync is not connected.");return false;}
   try{
-    const {data:rows,error}=await supabaseClient.from(PZ_MEMBERS_TABLE).update({
-      checked_in:false,ac:0,pz:0,services:0,biz:0,acc:0,step:"",notes:"",
-      revision:Date.now(),updated_at:new Date().toISOString(),updated_by:CLIENT_ID
-    }).eq("removed",false).select("*");
-    if(error)throw error;
-    data=pzUnique((rows||[]).map(pzFromCloud)); saveLocalState();
+    const key=window.PZ_WORKING_API_KEY||SUPABASE_PUBLISHABLE_KEY;
+    const rows=await pzRestRequest(
+      PZ_MEMBERS_TABLE+"?removed=eq.false",
+      {method:"PATCH",
+       body:JSON.stringify({
+         checked_in:false,ac:0,pz:0,services:0,biz:0,acc:0,step:"",notes:"",
+         revision:Date.now(),updated_at:new Date().toISOString(),updated_by:CLIENT_ID
+       })},key);
+    data=pzUnique((rows||[]).map(pzFromCloud));
+    saveLocalState();
     renderTableStructure();updateTotals();reorderRows();
-    setSyncBadge("🧹 PZ Cloud Reset — all iPads cleared"); return true;
-  }catch(e){alert("PZ Cloud Reset failed: "+(e.message||e));return false;}
-}
-async function waitForSupabaseLibrary(timeoutMs=15000){
-  const started=Date.now();
-  while(Date.now()-started<timeoutMs){
-    if(window.supabase && typeof window.supabase.createClient==="function") return true;
-    await new Promise(r=>setTimeout(r,100));
+    setSyncBadge("🧹 PZ Cloud Reset — all iPads cleared");
+    return true;
+  }catch(e){
+    alert("PZ Cloud Reset failed: "+(e.message||e));
+    return false;
   }
-  return false;
+}
+async function pzRestRequest(path, options={}, key){
+  const apiKey=key || window.PZ_WORKING_API_KEY || SUPABASE_PUBLISHABLE_KEY;
+  const headers=Object.assign({
+    "apikey":apiKey,
+    "Authorization":"Bearer "+apiKey,
+    "Content-Type":"application/json",
+    "Accept":"application/json",
+    "Prefer":"return=representation"
+  }, options.headers||{});
+  const res=await fetch(SUPABASE_URL+"/rest/v1/"+path,Object.assign({},options,{headers}));
+  const text=await res.text();
+  let body=null;
+  try{ body=text?JSON.parse(text):null; }catch(e){ body=text; }
+  if(!res.ok){
+    const msg=body && (body.message||body.error||body.hint) ? (body.message||body.error||body.hint) : (text||("HTTP "+res.status));
+    throw new Error("Supabase REST "+res.status+": "+msg);
+  }
+  return body;
+}
+
+async function pzRestHealth(){
+  try{
+    await pzRestRequest(PZ_MEMBERS_TABLE+"?select=id&limit=1",{},SUPABASE_PUBLISHABLE_KEY);
+    return SUPABASE_PUBLISHABLE_KEY;
+  }catch(first){
+    console.warn("Publishable key failed; trying legacy anon key.",first);
+    await pzRestRequest(PZ_MEMBERS_TABLE+"?select=id&limit=1",{},SUPABASE_LEGACY_ANON_KEY);
+    return SUPABASE_LEGACY_ANON_KEY;
+  }
 }
 
 async function initSupabaseSync(){
@@ -3773,47 +3806,58 @@ async function initSupabaseSync(){
   setSyncBadge("☁️ Connecting PZ Cloud…");
 
   try{
-    const loaded=await waitForSupabaseLibrary();
-    if(!loaded) throw new Error("Supabase library did not load. Check the iPad internet connection.");
+    // Test the actual PostgREST endpoint first. This avoids falsely reporting
+    // "active" when the Supabase JS library loads but the API cannot be reached.
+    const workingKey=await pzRestHealth();
+    window.PZ_WORKING_API_KEY=workingKey;
 
-    if(!supabaseClient){
-      supabaseClient=window.supabase.createClient(
-        SUPABASE_URL,
-        SUPABASE_PUBLISHABLE_KEY,
-        {auth:{persistSession:false,autoRefreshToken:false}}
-      );
+    // Keep the JS client for Realtime when available, but cloud persistence
+    // can use REST even if the JS client fails to initialize.
+    if(window.supabase && typeof window.supabase.createClient==="function"){
+      try{
+        supabaseClient=window.supabase.createClient(
+          SUPABASE_URL, workingKey,
+          {auth:{persistSession:false,autoRefreshToken:false}}
+        );
+      }catch(e){ console.warn("Supabase JS client unavailable; REST mode active.",e); }
     }
 
-    // Real connectivity + permissions test before claiming the cloud is active.
-    const health=await supabaseClient
-      .from(PZ_MEMBERS_TABLE)
-      .select("id", {count:"exact",head:true});
-    if(health.error) throw new Error("PZ database connection failed: "+health.error.message);
-
-    await pzHydrate();
+    // Load today's shared roster through REST.
+    const rows=await pzRestRequest(PZ_MEMBERS_TABLE+"?select=*&removed=eq.false&order=id",{},
+      workingKey);
+    const cloudRows=Array.isArray(rows)?rows:[];
+    data=pzUnique(cloudRows.map(pzFromCloud));
     stateHydrated=true;
+    saveLocalState();
+    renderTableStructure();
+    updateTotals();
+    reorderRows();
+
     supabaseReady=true;
 
-    if(cloudChannel) await supabaseClient.removeChannel(cloudChannel);
-    cloudChannel=supabaseClient.channel("pz-focus-follow-central",{
-      config:{broadcast:{self:false},presence:{key:CLIENT_ID}}
-    })
-    .on("postgres_changes",
-      {event:"INSERT",schema:"public",table:PZ_MEMBERS_TABLE},
-      payload=>{if(payload.new)pzApply(payload.new);})
-    .on("postgres_changes",
-      {event:"UPDATE",schema:"public",table:PZ_MEMBERS_TABLE},
-      payload=>{if(payload.new)pzApply(payload.new);})
-    .on("postgres_changes",
-      {event:"DELETE",schema:"public",table:PZ_MEMBERS_TABLE},
-      payload=>{if(payload.old)pzApply(Object.assign({},payload.old,{removed:true}));})
-    .subscribe(status=>{
-      if(status==="SUBSCRIBED"){
-        setSyncBadge("🟢 PZ Cloud Sync Active");
-      }else if(status==="CHANNEL_ERROR"||status==="TIMED_OUT"){
-        setSyncBadge("🟡 PZ Cloud Realtime Reconnecting…");
-      }
-    });
+    // Realtime is optional; REST remains the cloud source of truth.
+    if(supabaseClient){
+      try{
+        if(cloudChannel) await supabaseClient.removeChannel(cloudChannel);
+        cloudChannel=supabaseClient.channel("pz-focus-follow-central",{
+          config:{broadcast:{self:false},presence:{key:CLIENT_ID}}
+        })
+        .on("postgres_changes",
+          {event:"INSERT",schema:"public",table:PZ_MEMBERS_TABLE},
+          payload=>{if(payload.new)pzApply(payload.new);})
+        .on("postgres_changes",
+          {event:"UPDATE",schema:"public",table:PZ_MEMBERS_TABLE},
+          payload=>{if(payload.new)pzApply(payload.new);})
+        .on("postgres_changes",
+          {event:"DELETE",schema:"public",table:PZ_MEMBERS_TABLE},
+          payload=>{if(payload.old)pzApply(Object.assign({},payload.old,{removed:true}));})
+        .subscribe(status=>{
+          if(status==="SUBSCRIBED") setSyncBadge("🟢 PZ Cloud Sync Active");
+          else if(status==="CHANNEL_ERROR"||status==="TIMED_OUT")
+            setSyncBadge("🟢 PZ Cloud Sync Active • Realtime reconnecting");
+        });
+      }catch(e){ console.warn("Realtime unavailable; REST cloud remains active.",e); }
+    }
 
     setSyncBadge("🟢 PZ Cloud Sync Active");
     return true;
@@ -3821,9 +3865,7 @@ async function initSupabaseSync(){
     supabaseReady=false;
     console.error("PZ CLOUD INIT FAILED",e);
     setSyncBadge("🔴 PZ Cloud Sync Failed");
-    const detail=e && e.message ? e.message : String(e);
-    // Keep the tracker usable locally, but expose the real reason.
-    setTimeout(()=>console.warn("PZ CLOUD ERROR:",detail),0);
+    console.error("PZ CLOUD CONNECTION DETAIL:", e && e.message ? e.message : e);
     return false;
   }
 }
