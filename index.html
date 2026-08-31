@@ -5,7 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>🛍️PZ Focus & Follow 🆙</title>
 <!-- Lightweight MQTT over WebSockets for Instant Serverless Cloud Sync -->
-<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js">
+async function initSupabase() {
+  try {
+    if (!window.supabase) throw new Error('Supabase library not loaded');
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+    supabaseReady = true;
+    await hydrateFromCloud();
+    if (typeof subscribeCloudChanges === 'function') subscribeCloudChanges();
+    setSyncBadge('☁️ Cloud Sync Connected');
+  } catch (err) {
+    console.error('Supabase startup failed:', err);
+    supabaseReady = false;
+    setSyncBadge('⚠️ Cloud Sync Failed');
+  }
+}
+</script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
@@ -998,13 +1013,9 @@
   }
 
 
-    const PERMANENTLY_REMOVED_MEMBER_NAMES = new Set([
-    "Cesar Lopez B.", "Dennise Juarez A.", "Henry Avalos M.",
-    "Kevin Corona L.", "Luis Soto J.", "Tom Antorietto J.",
-    "Cesar LB.", "Dennise JA.", "Henry AM.", "Kevin CL.", "Luis SJ.", "Tom AJ."
-  ]);
+    const PERMANENTLY_REMOVED_MEMBER_NAMES = new Set();
 
-const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name": "Edward O.", "role": "Business Pro"}, {"name": "Brad T.", "role": "Creative"}, {"name": "Joey R.", "role": "Creative"}, {"name": "Nicholas Y.", "role": "Creative"}, {"name": "Paul Z.", "role": "Creative"}, {"name": "Dawn O.", "role": "Creative Pro"}, {"name": "Joe D.", "role": "Creative Pro"}, {"name": "Kassie S.", "role": "Creative Pro"}, {"name": "Andrew P.", "role": "Expert"}, {"name": "Patty W.", "role": "Expert"}, {"name": "Tiago N.", "role": "Expert"}, {"name": "Dee M.", "role": "Pro"}, {"name": "Chris W.", "role": "Pro"}, {"name": "Michelle T.", "role": "POP"}, {"name": "Adriel G.", "role": "Specialist"}, {"name": "Aladin B.", "role": "Specialist"}, {"name": "Alejandra G.", "role": "Specialist"}, {"name": "Andre S.", "role": "Specialist"}, {"name": "Angelo M.", "role": "Specialist"}, {"name": "Brooke P.", "role": "Specialist"}, {"name": "Chanel A.", "role": "Specialist"}, {"name": "Chris O.", "role": "Specialist"}, {"name": "Daniel C.", "role": "Specialist"}, {"name": "Darla C.", "role": "Specialist"}, {"name": "Don A.", "role": "Specialist"}, {"name": "Dylan S.", "role": "Specialist"}, {"name": "Farid L.", "role": "Specialist"}, {"name": "Felix F.", "role": "Specialist"}, {"name": "Francia S.", "role": "Specialist"}, {"name": "Frank O.", "role": "Specialist"}, {"name": "Halle H.", "role": "Specialist"}, {"name": "Jacob O.", "role": "Specialist"}, {"name": "Jahkell R.", "role": "Specialist"}, {"name": "Jake O.", "role": "Specialist"}, {"name": "Jamal D.", "role": "Specialist"}, {"name": "James O.", "role": "Specialist"}, {"name": "Jay J.", "role": "Specialist"}, {"name": "Josheiry T.", "role": "Specialist"}, {"name": "Joshua S.", "role": "Specialist"}, {"name": "Josh W.", "role": "Specialist"}, {"name": "Josiah B.", "role": "Specialist"}, {"name": "Joyce L.", "role": "Specialist"}, {"name": "Kaitlyn V.", "role": "Specialist"}, {"name": "Kari D.", "role": "Specialist"}, {"name": "Ken M.", "role": "Specialist"}, {"name": "Ke’Ana A.", "role": "Specialist"}, {"name": "Kristal", "role": "Specialist"}, {"name": "Lexi E.", "role": "Specialist"}, {"name": "Liam M.", "role": "Specialist"}, {"name": "Loren F.", "role": "Specialist"}, {"name": "Lucas M.", "role": "Specialist"}, {"name": "Luis S.", "role": "Specialist"}, {"name": "Melody P.", "role": "Specialist"}, {"name": "Michael T.", "role": "Specialist"}, {"name": "Miranda G.", "role": "Specialist"}, {"name": "Natalie G.", "role": "Specialist"}, {"name": "Nick A.", "role": "Specialist"}, {"name": "Ofelia C.", "role": "Specialist"}, {"name": "Peter R.", "role": "Specialist"}, {"name": "Ramon B.", "role": "Specialist"}, {"name": "Ray J.", "role": "Specialist"}, {"name": "Roanne J.", "role": "Specialist"}, {"name": "Rob K.", "role": "Specialist"}, {"name": "Ron E.", "role": "Specialist"}, {"name": "Sador R.", "role": "Specialist"}, {"name": "SKYLAR W.", "role": "Specialist"}, {"name": "Thania M.", "role": "Specialist"}, {"name": "Tommy C.", "role": "Specialist"}, {"name": "Trisha N.", "role": "Specialist"}, {"name": "Valeria J.", "role": "Specialist"}, {"name": "Zahra R.", "role": "Specialist"}, {"name": "Zion M.", "role": "Specialist"}, {"name": "Delaine D.", "role": "Tech and Merch Pro"}, {"name": "Sara G.", "role": "Tech and Merch Pro"}];
+const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name": "Edward O.", "role": "Business Pro"}, {"name": "Brad T.", "role": "Creative"}, {"name": "Joey R.", "role": "Creative"}, {"name": "Nicholas Y.", "role": "Creative"}, {"name": "Paul Z.", "role": "Creative"}, {"name": "Dawn O.", "role": "Creative Pro"}, {"name": "Joe D.", "role": "Creative Pro"}, {"name": "Kassie S.", "role": "Creative Pro"}, {"name": "Andrew P.", "role": "Expert"}, {"name": "Patty W.", "role": "Expert"}, {"name": "Tiago N.", "role": "Expert"}, {"name": "Dee M.", "role": "Pro"}, {"name": "Chris W.", "role": "Pro"}, {"name": "Michelle T.", "role": "POP"}, {"name": "Adriel G.", "role": "Specialist"}, {"name": "Aladin B.", "role": "Specialist"}, {"name": "Alejandra G.", "role": "Specialist"}, {"name": "Andre S.", "role": "Specialist"}, {"name": "Angelo M.", "role": "Specialist"}, {"name": "Brooke P.", "role": "Specialist"}, {"name": "Chanel A.", "role": "Specialist"}, {"name": "Chris O.", "role": "Specialist"}, {"name": "Daniel C.", "role": "Specialist"}, {"name": "Darla C.", "role": "Specialist"}, {"name": "Don A.", "role": "Specialist"}, {"name": "Dylan S.", "role": "Specialist"}, {"name": "Farid L.", "role": "Specialist"}, {"name": "Felix F.", "role": "Specialist"}, {"name": "Francia S.", "role": "Specialist"}, {"name": "Frank O.", "role": "Specialist"}, {"name": "Halle H.", "role": "Specialist"}, {"name": "Jacob O.", "role": "Specialist"}, {"name": "Jahkell R.", "role": "Specialist"}, {"name": "Jake O.", "role": "Specialist"}, {"name": "Jamal D.", "role": "Specialist"}, {"name": "James O.", "role": "Specialist"}, {"name": "Jay J.", "role": "Specialist"}, {"name": "Josheiry T.", "role": "Specialist"}, {"name": "Joshua S.", "role": "Specialist"}, {"name": "Josh W.", "role": "Specialist"}, {"name": "Josiah B.", "role": "Specialist"}, {"name": "Joyce L.", "role": "Specialist"}, {"name": "Kaitlyn V.", "role": "Specialist"}, {"name": "Kari D.", "role": "Specialist"}, {"name": "Ken M.", "role": "Specialist"}, {"name": "Ke’Ana A.", "role": "Specialist"}, {"name": "Kristal", "role": "Specialist"}, {"name": "Lexi E.", "role": "Specialist"}, {"name": "Liam M.", "role": "Specialist"}, {"name": "Loren F.", "role": "Specialist"}, {"name": "Lucas M.", "role": "Specialist"}, {"name": "Luis S.", "role": "Specialist"}, {"name": "Melody P.", "role": "Specialist"}, {"name": "Michael T.", "role": "Specialist"}, {"name": "Miranda G.", "role": "Specialist"}, {"name": "Natalie G.", "role": "Specialist"}, {"name": "Nick A.", "role": "Specialist"}, {"name": "Ofelia C.", "role": "Specialist"}, {"name": "Peter R.", "role": "Specialist"}, {"name": "Ramon B.", "role": "Specialist"}, {"name": "Ray J.", "role": "Specialist"}, {"name": "Roanne J.", "role": "Specialist"}, {"name": "Rob K.", "role": "Specialist"}, {"name": "Ron E.", "role": "Specialist"}, {"name": "Sador R.", "role": "Specialist"}, {"name": "SKYLAR W.", "role": "Specialist"}, {"name": "Thania M.", "role": "Specialist"}, {"name": "Tommy C.", "role": "Specialist"}, {"name": "Trisha N.", "role": "Specialist"}, {"name": "Valeria J.", "role": "Specialist"}, {"name": "Zahra R.", "role": "Specialist"}, {"name": "Zion M.", "role": "Specialist"}, {"name": "Delaine D.", "role": "Tech and Merch Pro"}, {"name": "Sara G.", "role": "Tech and Merch Pro"}, {"name": "Cesar LB.", "role": "Specialist"}, {"name": "Dennise JA.", "role": "Specialist"}, {"name": "Henry AM.", "role": "Specialist"}, {"name": "Kevin CL.", "role": "Specialist"}, {"name": "Luis SJ.", "role": "Specialist"}, {"name": "Tom AJ.", "role": "Specialist"}];
 
   let currentTab = 'daily'; // 'daily' | 'priorday' | 'weekly' | 'monthly' | 'quarterly' | 'history'
   let selectedPeriodKey = 'current';
@@ -3429,7 +3440,27 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   // The iPads no longer decide which local copy is authoritative. Supabase
   // owns today's live state. MQTT remains loaded for compatibility, but it is
   // NOT used for live tracker data in this version.
-  const SUPABASE_URL = "https://bkmpqjoqcilicmfahemg.supabase.co";
+  async function hydrateFromCloud() {
+  if (!supabaseClient) throw new Error('Supabase client not ready');
+  const { data: rows, error } = await supabaseClient
+    .from('pz_focus_follow_members')
+    .select('*')
+    .eq('removed', false);
+  if (error) throw error;
+  if (Array.isArray(rows)) {
+    const byId = new Map();
+    rows.forEach(row => {
+      const member = dbRowToMember(row);
+      byId.set(String(member.id), member);
+    });
+    data = Array.from(byId.values());
+    renderTableStructure();
+    updateTotals();
+    if (typeof scheduleReorder === 'function') scheduleReorder();
+  }
+}
+
+const SUPABASE_URL = "https://bkmpqjoqcilicmfahemg.supabase.co";
   const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_ss_a29uxD1FZWZ0at6uk_Q_a55sCjRg";
   let supabaseClient = null;
   let supabaseReady = false;
@@ -4002,6 +4033,10 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   reorderRows();
   initSupabaseSync();
   setupAutoEngines();
+
+initSupabase();
+
+window.addEventListener('load', function(){ setTimeout(function(){ if(typeof initSupabase==='function') initSupabase(); }, 50); });
 </script>
 </body>
 </html>
