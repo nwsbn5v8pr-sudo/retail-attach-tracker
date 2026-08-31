@@ -3533,10 +3533,17 @@ async function pzHydrate(){
 }
 function pzApply(row){
   if(!row||row.removed)return;
-  const incoming=pzFromCloud(row), i=data.findIndex(m=>String(m.id)===String(incoming.id));
-  if(i<0)data.push(incoming);
-  else if(Number(incoming.rev)>=Number(data[i].rev||0))data[i]=incoming;
-  data=pzUnique(data); saveLocalState(); renderTableStructure(); updateTotals(); reorderRows();
+  const incoming=pzFromCloud(row);
+  const i=data.findIndex(m=>String(m.id)===String(incoming.id));
+  if(i<0) data.push(incoming);
+  else if(Number(incoming.rev)>=Number(data[i].rev||0)) data[i]=incoming;
+  data=pzUnique(data);
+  saveLocalState();
+  requestAnimationFrame(()=>{
+    renderTableStructure();
+    updateTotals();
+    reorderRows();
+  });
 }
 function pzWrite(member,patch){
   if(!supabaseReady) return Promise.reject(new Error("PZ Cloud Sync is not connected"));
@@ -3584,10 +3591,23 @@ async function initSupabaseSync(){
     supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,
       {auth:{persistSession:false,autoRefreshToken:false}});
     await pzHydrate(); supabaseReady=true;
-    cloudChannel=supabaseClient.channel("pz-focus-follow-central")
-      .on("postgres_changes",{event:"*",schema:"public",table:PZ_MEMBERS_TABLE},payload=>{
-        if(payload.eventType!=="DELETE"&&payload.new)pzApply(payload.new);
-      }).subscribe(status=>{if(status==="SUBSCRIBED")setSyncBadge("🟢 PZ Cloud Sync Active");});
+    cloudChannel=supabaseClient.channel("pz-focus-follow-central", {
+        config: { broadcast: { self: false }, presence: { key: CLIENT_ID } }
+      })
+      .on("postgres_changes",
+        {event:"INSERT",schema:"public",table:PZ_MEMBERS_TABLE},
+        payload=>{ if(payload.new) pzApply(payload.new); })
+      .on("postgres_changes",
+        {event:"UPDATE",schema:"public",table:PZ_MEMBERS_TABLE},
+        payload=>{ if(payload.new) pzApply(payload.new); })
+      .subscribe(status=>{
+        if(status==="SUBSCRIBED") {
+          setSyncBadge("🟢 PZ Cloud Sync Active");
+          console.log("PZ realtime subscribed");
+        } else if(status==="CHANNEL_ERROR" || status==="TIMED_OUT") {
+          setSyncBadge("🟡 PZ Cloud Realtime Reconnecting…");
+        }
+      });
     setSyncBadge("🟢 PZ Cloud Sync Active");
   }catch(e){supabaseReady=false;console.error("PZ CLOUD INIT FAILED",e);setSyncBadge("🔴 PZ Cloud Sync Failed");}
 }
