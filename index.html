@@ -882,6 +882,45 @@
     margin-top: 16px;
   }
 
+
+  /* Mobile sticky-column fix: keep the frozen name column from covering
+     the Status/metric columns while horizontal-scrolling. */
+  table { width: max-content; min-width: 100%; }
+  .col-sticky {
+    width: 220px !important;
+    min-width: 220px !important;
+    max-width: 220px !important;
+    overflow: hidden;
+    background: var(--sticky-bg) !important;
+    isolation: isolate;
+  }
+  tbody tr.checked-in-row .col-sticky {
+    background: var(--bg-card) !important;
+  }
+  tbody tr.grand-slam-row .col-sticky {
+    background: var(--bg-card) !important;
+  }
+  .name-cell {
+    min-width: 0;
+    max-width: 160px;
+    overflow: hidden;
+  }
+  .member-name, .role-tag {
+    display: block;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  @media (max-width: 800px) {
+    .col-sticky {
+      width: 210px !important;
+      min-width: 210px !important;
+      max-width: 210px !important;
+    }
+    .name-cell { max-width: 150px; }
+    .member-name, .role-tag { max-width: 150px; }
+  }
 </style>
 </head>
 <body>
@@ -2239,10 +2278,12 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     if (currentTab !== 'daily') return;
     const member = data.find(d => String(d.id) === String(index));
     if (!member) return;
-    member.notes = val;
+
+    member.notes = String(val ?? '');
+    pendingNotesByMember.set(String(member.id), member.notes);
     stampEdit(member);
-    broadcastChange();
-    supabaseSaveMemberPatch(member, {notes: val});
+    saveLocalState();
+    supabaseSaveMemberPatch(member, {notes: member.notes});
   }
 
   function renderRow(i) {
@@ -2543,8 +2584,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
         if (!saved) console.error('PZ add-member cloud write failed');
       });
     }
-
-    INITIAL_ROSTER.push({ name: trimmedName, role: selectedRole });
+    // Cloud roster is the source of truth; do not duplicate new members here.
 
     lastVersion = Date.now();
     saveLocalState();
@@ -3086,15 +3126,40 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     }
   }
 
-  function resetCounts() {
-    if (confirm(
+  async function resetCounts() {
+    if (!confirm(
       "RESET TODAY'S LIVE TRACKER ON ALL IPADS?\n\n" +
       "This will clear today's check-ins, metrics, steps, and notes on every " +
       "connected/reconnecting iPad.\n\n" +
       "Historical / previous-day records will NOT be deleted."
-    )) {
-      publishRoomReset();
-    }
+    )) return;
+
+    // Supabase is the central source of truth for this version of the tracker.
+    // Do NOT use the legacy MQTT reset here: MQTT is retained only for
+    // compatibility, while live tracker state is persisted in Supabase.
+    const ok = await supabaseResetDay();
+    if (!ok) return;
+
+    // Clear any locally queued edits so an older note/step cannot be written
+    // back immediately after the reset.
+    try {
+      if (typeof pendingStepByMember !== 'undefined') pendingStepByMember.clear();
+      if (typeof pendingNotesByMember !== 'undefined') pendingNotesByMember.clear();
+      if (typeof clearPending === 'function') clearPending();
+    } catch (e) {}
+
+    lastVersion = Math.max(Number(lastVersion || 0), Date.now());
+    try {
+      localStorage.setItem('pz_room_reset_id', CLIENT_ID + '_' + Date.now());
+      localStorage.setItem('pz_room_reset_ts', String(Date.now()));
+      localStorage.setItem('pz_room_reset_day', getTodayString());
+    } catch (e) {}
+
+    saveLocalState();
+    renderTableStructure();
+    updateTotals();
+    reorderRows();
+    setSyncBadge('🧹 Reset Day Complete — Cloud + All iPads');
   }
 
   function exportCSV() {
@@ -3673,6 +3738,7 @@ const PZ_HISTORY_TABLE = "pz_focus_follow_history";
 
 let supabaseClient=null, supabaseReady=false, cloudChannel=null, cloudQueue=Promise.resolve();
 const pendingStepByMember = new Map();
+const pendingNotesByMember = new Map();
 
 function pzCloudRow(m, patch={}) {
   return Object.assign({
@@ -3744,8 +3810,12 @@ function pzApply(row){
   }else{
     const incoming=pzFromCloud(row);
     const pendingStep=pendingStepByMember.get(id);
+    const pendingNote=pendingNotesByMember.get(id);
     if(pendingStep !== undefined && incoming.step !== pendingStep){
       incoming.step=pendingStep;
+    }
+    if(pendingNote !== undefined && incoming.notes !== pendingNote){
+      incoming.notes=pendingNote;
     }
     const i=data.findIndex(function(m){ return String(m.id)===id; });
     if(i<0) data.push(incoming);
@@ -3789,6 +3859,10 @@ async function supabaseSaveMemberPatch(member,patch){
     if(row && pendingStep !== undefined && String(row.step||"") === pendingStep){
       pendingStepByMember.delete(key);
     }
+    const pendingNote = pendingNotesByMember.get(key);
+    if(row && pendingNote !== undefined && String(row.notes||"") === pendingNote){
+      pendingNotesByMember.delete(key);
+    }
     return row;
   }catch(e){syncWarn("PZ CLOUD PATCH FAILED",e);setSyncBadge("🔴 PZ Cloud Sync Failed");return null;}
 }
@@ -3804,11 +3878,24 @@ async function supabaseIncrement(member,metric,delta){
   try{return await pzWrite(member,patch);}catch(e){syncWarn("PZ CLOUD METRIC FAILED",e);setSyncBadge("🔴 PZ Cloud Sync Failed");return null;}
 }
 async function supabaseAddMember(member){
-  try{return await pzWrite(member,{});}catch(e){syncWarn("PZ CLOUD ADD FAILED",e);return null;}
+  try{
+    const snapshot = JSON.parse(JSON.stringify(member));
+    return await pzWrite(snapshot,{});
+  }catch(e){
+    syncWarn("PZ CLOUD ADD FAILED",e);
+    return null;
+  }
 }
 async function supabaseResetDay(){
   if(!supabaseReady){alert("PZ Cloud Sync is not connected.");return false;}
   try{
+    // A reset supersedes any in-flight editable-field reconciliation.
+    try {
+      if (typeof pendingStepByMember !== 'undefined') pendingStepByMember.clear();
+      if (typeof pendingNotesByMember !== 'undefined') pendingNotesByMember.clear();
+      if (typeof clearPending === 'function') clearPending();
+    } catch (e) {}
+
     const key=window.PZ_WORKING_API_KEY||SUPABASE_PUBLISHABLE_KEY;
     const rows=await pzRestRequest(
       PZ_MEMBERS_TABLE+"?removed=eq.false",
