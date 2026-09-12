@@ -958,6 +958,7 @@
         <button class="secondary more-menu-btn" type="button" onclick="toggleMoreMenu(event)" aria-haspopup="true" aria-expanded="false">⋯ More</button>
         <div class="more-menu" id="moreMenu">
           <button type="button" onclick="checkAll(false);closeMoreMenu()">◻️ Clear Check-Ins</button>
+          <button type="button" onclick="manualRollOverDay();closeMoreMenu()">💾 Save & Start New Day</button>
           <button type="button" onclick="exportCSV();closeMoreMenu()">📥 Export CSV</button>
           <button type="button" onclick="window.pzLockNow(); closeMoreMenu(); return false;">🔒 Lock</button>
           <button type="button" class="menu-danger" onclick="resetCounts();closeMoreMenu()">🔄 Reset Day</button>
@@ -1102,7 +1103,7 @@
   <div class="history-card" id="historyCard">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
       <h2 style="font-size: 18px; font-weight: 700;">📜 Daily Shift History Logs</h2>
-      <span style="font-size: 12px; color: var(--text-secondary);">⚡ Archived automatically at end of day</span>
+      <span style="font-size: 12px; color: var(--text-secondary);">⚡ Auto-archived nightly • Manual rollover available in ⋯ More</span>
     </div>
     <div id="historyListContainer"></div>
   </div>
@@ -2889,6 +2890,44 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       setSyncBadge("🔴 PZ Daily Save Failed — Live data NOT cleared");
       return false;
     }
+  }
+
+  // Manual day rollover: archive the current live day to cloud history,
+  // verify the archive succeeds, then clear the live board across all iPads.
+  // This is intentionally separate from "Save Today's Data", which preserves
+  // the live shift without resetting it.
+  async function manualRollOverDay(){
+    if(!stateHydrated){
+      alert("⏳ The tracker is still loading. Please wait a moment and try again.");
+      return false;
+    }
+
+    if(!hasAnyActivity(data)){
+      alert("There is no activity to roll over yet.");
+      return false;
+    }
+
+    const liveDay = (function(){
+      try { return localStorage.getItem(STORAGE_KEY_LIVE_DAY); } catch(e) { return null; }
+    })() || getTodayString();
+
+    const confirmed = confirm(
+      `💾 Save & Start New Day\\n\\n` +
+      `This will securely archive ${liveDay} to Daily History, then clear the Live tracker for a fresh day.\\n\\n` +
+      `Your archived metrics will remain available in Prior Day, Weekly, Monthly and Quarterly views.\\n\\n` +
+      `Continue?`
+    );
+    if(!confirmed) return false;
+
+    closeMoreMenu();
+
+    const ok = await archiveAndClearPzDay(liveDay, "manual-rollover");
+    if(ok){
+      renderHistoryList();
+      updatePeriodSelector();
+      flashAutoSaveBadge(`✅ ${liveDay} Saved • New Day Started`);
+    }
+    return ok;
   }
 
   async function scheduledPzDailyArchive(){
