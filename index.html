@@ -2838,6 +2838,11 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
 
       const key=window.PZ_WORKING_API_KEY||SUPABASE_PUBLISHABLE_KEY;
 
+      // Finish any metric/step/note writes already queued by this device before
+      // taking the archive snapshot. This prevents the rollover from racing a
+      // just-tapped counter and saving the previous value.
+      try { await Promise.resolve(cloudQueue).catch(function(){}); } catch (e) {}
+
       // Pull the latest shared cloud state immediately before archiving so an
       // iPad with a stale local copy can never overwrite a newer device.
       const cloudRows=await pzRestRequest(
@@ -2942,7 +2947,12 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     const ok = await archiveAndClearPzDay(liveDay, "manual-rollover");
     if(ok){
       renderHistoryList();
-      updatePeriodSelector();
+      if (currentTab === 'weekly' || currentTab === 'monthly' || currentTab === 'quarterly') {
+        populatePeriodSelector(currentTab);
+      }
+      renderTableStructure();
+      updateTotals();
+      reorderRows();
       flashAutoSaveBadge(`✅ ${liveDay} Saved • New Day Started`);
     }
     return ok;
@@ -4033,9 +4043,30 @@ async function initSupabaseSync(){
     renderTableStructure();
     updateTotals();
     reorderRows();
+
+    // Mark this device's live board with the day it belongs to, but NEVER
+    // overwrite an existing older stamp. An older stamp is what lets the
+    // catch-up engine archive a day after an iPad was asleep/closed.
+    try {
+      if (!localStorage.getItem(STORAGE_KEY_LIVE_DAY)) {
+        localStorage.setItem(STORAGE_KEY_LIVE_DAY, getTodayString());
+      }
+    } catch (e) {}
+
+    // The history loader requires the cloud connection flag, so it must run
+    // AFTER supabaseReady is set. The previous version called it too early,
+    // which meant Prior Day could stay empty even when the history table had
+    // archived records.
+    supabaseReady=true;
     await loadPzCloudHistory();
 
-    supabaseReady=true;
+    // Start the actual 15-second rollover engine. The previous version defined
+    // setupAutoEngines() but never invoked it, so the automatic 9:01 PM archive
+    // could never fire.
+    if (!window.__pzAutoEnginesStarted) {
+      window.__pzAutoEnginesStarted = true;
+      setupAutoEngines();
+    }
 
     // Realtime is optional; REST remains the cloud source of truth.
     if(supabaseClient){
