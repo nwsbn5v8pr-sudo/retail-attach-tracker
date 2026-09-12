@@ -2850,6 +2850,56 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       );
       const cloudData=(Array.isArray(cloudRows)?cloudRows:[]).map(pzFromCloud);
 
+      // SAFETY GATE: never archive an older day from a cloud board that has
+      // already been reset to TODAY. This prevents a late-opening iPad from
+      // taking an already-cleared live board and overwriting real history with zeros.
+      const cloudShiftDates = Array.from(new Set(
+        (Array.isArray(cloudRows)?cloudRows:[])
+          .map(r => String(r.shift_date || "").slice(0,10))
+          .filter(Boolean)
+      ));
+      if (archiveDate !== today &&
+          cloudShiftDates.length > 0 &&
+          cloudShiftDates.every(d => d === today)) {
+        syncLog("PZ ARCHIVE SKIPPED — CLOUD ALREADY RESET", {
+          archiveDate: archiveDate, today: today, cloudShiftDates: cloudShiftDates
+        });
+        return false;
+      }
+
+      const hasCloudActivity = hasAnyActivity(cloudData);
+
+      // SECOND SAFETY GATE: if this date already has a real archived snapshot,
+      // never replace it with an empty snapshot from a device waking after rollover.
+      let existingHistory = null;
+      try {
+        const existingRows = await pzRestRequest(
+          PZ_HISTORY_TABLE + "?select=history_date,snapshot&history_date=eq." +
+          encodeURIComponent(archiveDate) + "&limit=1", {}, key
+        );
+        if (Array.isArray(existingRows) && existingRows[0]) {
+          let snap = existingRows[0].snapshot;
+          if (typeof snap === "string") {
+            try { snap = JSON.parse(snap); } catch(e) { snap = []; }
+          }
+          existingHistory = Array.isArray(snap) ? snap : [];
+        }
+      } catch (historyReadErr) {
+        if (!hasCloudActivity) {
+          syncWarn("PZ ARCHIVE SAFETY CHECK FAILED — NOT CLEARING LIVE DATA", historyReadErr);
+          return false;
+        }
+      }
+
+      if (Array.isArray(existingHistory) &&
+          hasAnyActivity(existingHistory) &&
+          !hasCloudActivity) {
+        syncLog("PZ ARCHIVE SKIPPED — WOULD OVERWRITE HISTORY WITH BLANK DATA", {
+          archiveDate: archiveDate
+        });
+        return false;
+      }
+
       const historyPayload={
         history_date:archiveDate,
         snapshot:cloudData,
@@ -2972,7 +3022,10 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
 
     // Exact requested daily rollover: 9:01 PM local Pacific time.
     if(hh===21 && mm===1 && lastArchived!==today){
-      await archiveAndClearPzDay(today,"scheduled-9:01pm");
+      // Only a device whose live board is stamped TODAY may perform the scheduled archive.
+      if (liveDay === today && stateHydrated) {
+        await archiveAndClearPzDay(today,"scheduled-9:01pm");
+      }
       return;
     }
 
