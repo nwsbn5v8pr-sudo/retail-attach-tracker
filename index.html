@@ -966,6 +966,20 @@
       </div>
     </div>
   </div>
+
+  <!-- View Navigation -->
+  <div class="view-nav" id="viewNav">
+    <div class="segmented-control" role="tablist" aria-label="PZ Focus & Follow views">
+      <button class="tab-btn active" id="tab-daily" onclick="switchTab('daily')" role="tab">📅 Daily</button>
+      <button class="tab-btn" id="tab-priorday" onclick="switchTab('priorday')" role="tab">⬅️ Prior Day</button>
+      <button class="tab-btn" id="tab-weekly" onclick="switchTab('weekly')" role="tab">📊 Weekly</button>
+      <button class="tab-btn" id="tab-monthly" onclick="switchTab('monthly')" role="tab">🗓️ Monthly</button>
+      <button class="tab-btn" id="tab-quarterly" onclick="switchTab('quarterly')" role="tab">📈 Quarterly</button>
+      <button class="tab-btn" id="tab-history" onclick="switchTab('history')" role="tab">📜 History</button>
+    </div>
+    <select class="period-selector" id="periodSelector" style="display:none;" onchange="onPeriodChange()" aria-label="Select reporting period"></select>
+  </div>
+
 <!-- Top Performers Podium Section -->
   <div class="top-performers-card" id="topPerformersSection">
     <div class="top-performers-header">
@@ -1103,7 +1117,7 @@
   <div class="history-card" id="historyCard">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
       <h2 style="font-size: 18px; font-weight: 700;">📜 Daily Shift History Logs</h2>
-      <span style="font-size: 12px; color: var(--text-secondary);">⚡ Auto-archived nightly • Manual rollover available in ⋯ More</span>
+      <span style="font-size: 12px; color: var(--text-secondary);">⚡ Auto-archived nightly • Manual rollover available in ⋯ More • Prior Day shows latest archive</span>
     </div>
     <div id="historyListContainer"></div>
   </div>
@@ -2608,7 +2622,8 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   function switchTab(tab) {
     currentTab = tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById(`tab-${tab}`).classList.add('active');
+    const activeTab = document.getElementById(`tab-${tab}`);
+    if (activeTab) activeTab.classList.add('active');
 
     const periodSelector = document.getElementById('periodSelector');
     const mainTableCard = document.getElementById('mainTableCard');
@@ -2623,7 +2638,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     if (tab === 'history') {
       mainTableCard.style.display = 'none';
       historyCard.style.display = 'block';
-      periodSelector.style.display = 'none';
+      if (periodSelector) periodSelector.style.display = 'none';
       filterPanel.style.display = 'none';
       if (btnUndo) btnUndo.style.display = 'none';
       if (btnArchive) btnArchive.style.display = 'none';
@@ -2639,7 +2654,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     filterPanel.style.display = 'flex';
 
     if (tab === 'daily') {
-      periodSelector.style.display = 'none';
+      if (periodSelector) periodSelector.style.display = 'none';
       if (btnUndo) btnUndo.style.display = 'inline-flex';
       btnClearCheckins.style.display = 'inline-flex';
       btnReset.style.display = 'inline-flex';
@@ -2647,22 +2662,23 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       document.getElementById('th-notes').textContent = 'Notes / Focus';
       document.getElementById('tot-notes').textContent = '-';
     } else if (tab === 'priorday') {
-      periodSelector.style.display = 'none';
+      if (periodSelector) periodSelector.style.display = 'none';
       if (btnUndo) btnUndo.style.display = 'none';
       btnClearCheckins.style.display = 'none';
       btnReset.style.display = 'none';
       if (btnAddMember) btnAddMember.style.display = 'none';
       document.getElementById('th-notes').textContent = 'Notes / Focus';
-      document.getElementById('tot-notes').textContent = historyRecords.length > 0 ? `Archive: ${historyRecords[0].date}` : 'No Prior Day Data';
+      const newestArchive = historyRecords.slice().sort((a,b)=>parseDateSafe(b.date)-parseDateSafe(a.date))[0];
+      document.getElementById('tot-notes').textContent = newestArchive ? `Archive: ${newestArchive.date}` : 'No Prior Day Data';
     } else {
-      periodSelector.style.display = 'inline-block';
+      if (periodSelector) periodSelector.style.display = 'inline-block';
       if (btnUndo) btnUndo.style.display = 'none';
       btnClearCheckins.style.display = 'none';
       btnReset.style.display = 'none';
       if (btnAddMember) btnAddMember.style.display = 'none';
       document.getElementById('th-notes').textContent = 'Performance Pace';
       document.getElementById('tot-notes').textContent = 'Store Summary';
-      populatePeriodSelector(tab);
+      if (periodSelector) populatePeriodSelector(tab);
     }
 
     renderTableStructure();
@@ -2719,7 +2735,9 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   }
 
   function onPeriodChange() {
-    selectedPeriodKey = document.getElementById('periodSelector').value;
+    const periodSelector = document.getElementById('periodSelector');
+    if (!periodSelector) return;
+    selectedPeriodKey = periodSelector.value;
     renderTableStructure();
     updateTotals();
     reorderRows();
