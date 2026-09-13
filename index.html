@@ -552,6 +552,12 @@
     font-size: 13px;
   }
 
+  /* Prevent the local role-grouped roster from flashing before the shared
+     Supabase roster is hydrated. Reveal only the final cloud-sorted state. */
+  #tableBody.pz-initial-loading {
+    visibility: hidden;
+  }
+
   /* Sortable Headers */
   thead th {
     position: sticky;
@@ -2880,7 +2886,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       // Pull the latest shared cloud state immediately before archiving so an
       // iPad with a stale local copy can never overwrite a newer device.
       const cloudRows=await pzRestRequest(
-        PZ_MEMBERS_TABLE+"?select=*&removed=eq.false&order=id",{},key
+        PZ_MEMBERS_TABLE+"?select=*&removed=eq.false&order=name.asc",{},key
       );
       const cloudData=(Array.isArray(cloudRows)?cloudRows:[]).map(pzFromCloud);
 
@@ -3853,6 +3859,14 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   // The iPads no longer decide which local copy is authoritative. Supabase
   // owns today's live state. MQTT remains loaded for compatibility, but it is
   // NOT used for live tracker data in this version.
+  function setPzInitialBoardReady(ready) {
+    const tbody = document.getElementById('tableBody');
+    if (tbody) {
+      if (ready) tbody.classList.remove('pz-initial-loading');
+      else tbody.classList.add('pz-initial-loading');
+    }
+  }
+
   async function hydrateFromCloud() {
   if (!supabaseClient) throw new Error('Supabase client not ready');
   const { data: rows, error } = await supabaseClient
@@ -3912,7 +3926,7 @@ function pzUnique(list){
 async function pzCloudLoad(){
   const key=window.PZ_WORKING_API_KEY||SUPABASE_PUBLISHABLE_KEY;
   const rows=await pzRestRequest(
-    PZ_MEMBERS_TABLE+"?select=*&removed=eq.false&order=id",{},key
+    PZ_MEMBERS_TABLE+"?select=*&removed=eq.false&order=name.asc",{},key
   );
   const cloudRows=Array.isArray(rows)?rows:[];
   const activeByName=new Map(
@@ -4111,7 +4125,7 @@ async function initSupabaseSync(){
     }
 
     // Load today's shared roster through REST.
-    const rows=await pzRestRequest(PZ_MEMBERS_TABLE+"?select=*&removed=eq.false&order=id",{},
+    const rows=await pzRestRequest(PZ_MEMBERS_TABLE+"?select=*&removed=eq.false&order=name.asc",{},
       workingKey);
     const cloudRows=Array.isArray(rows)?rows:[];
     data=pzUnique(cloudRows.map(pzFromCloud));
@@ -4120,6 +4134,7 @@ async function initSupabaseSync(){
     renderTableStructure();
     updateTotals();
     reorderRows();
+    setPzInitialBoardReady(true);
 
     // Mark this device's live board with the day it belongs to, but NEVER
     // overwrite an existing older stamp. An older stamp is what lets the
@@ -4173,12 +4188,17 @@ async function initSupabaseSync(){
     return true;
   }catch(e){
     supabaseReady=false;
+    setPzInitialBoardReady(true);
     console.error("PZ CLOUD INIT FAILED",e);
     setSyncBadge("🔴 PZ Cloud Sync Failed");
     console.error("PZ CLOUD CONNECTION DETAIL:", e && e.message ? e.message : e);
     return false;
   }
 }
+
+// Keep the initial static/local roster hidden while Supabase determines the
+// authoritative order. This eliminates the role-grouped -> first-name flash.
+setPzInitialBoardReady(false);
 
 window.addEventListener('load', function(){
   setTimeout(function(){
