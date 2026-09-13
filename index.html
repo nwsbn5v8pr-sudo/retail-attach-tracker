@@ -12,6 +12,13 @@
   const PZ_AUTH_KEY = "pz_focus_follow_authenticated_v2";
   const PZ_AUTH_TIME_KEY = "pz_focus_follow_authenticated_at_v1";
   const PZ_AUTH_INTERVAL_MS = 60 * 60 * 1000;
+  const PZ_LOCK_THEME_KEY = "pz_focus_follow_lock_theme_v1";
+
+  function pzGetLockTheme() {
+    const saved = localStorage.getItem(PZ_LOCK_THEME_KEY);
+    if (saved === "light" || saved === "dark") return saved;
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
 
   function pzIsAuthenticated() {
     if (sessionStorage.getItem(PZ_AUTH_KEY) !== "true") return false;
@@ -32,77 +39,128 @@
     gate.style.cssText = `
       position:fixed; inset:0; z-index:2147483647; width:100%; height:100%;
       display:flex; align-items:center; justify-content:center;
-      background:linear-gradient(145deg,#080a10,#151924 55%,#080a10);
-      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",sans-serif;
       pointer-events:auto; box-sizing:border-box;
+      -webkit-user-select:none; user-select:none;
+      transition:background .2s ease,color .2s ease;
     `;
 
     gate.innerHTML = `
       <div id="pz-lock-card" style="
-        width:min(560px,calc(100% - 32px)); max-height:calc(100% - 32px);
-        overflow:auto; box-sizing:border-box; padding:42px 40px 38px;
-        border-radius:30px; text-align:center;
-        background:rgba(24,29,43,.94);
-        border:1px solid rgba(145,170,220,.42);
-        box-shadow:0 24px 70px rgba(0,0,0,.55),0 0 50px rgba(65,100,180,.12);
-        color:#fff; backdrop-filter:blur(22px);
+        width:min(420px,calc(100% - 40px));
+        box-sizing:border-box; padding:0 10px 18px;
+        text-align:center; background:transparent; border:0;
+        box-shadow:none;
       ">
-        <div style="font-size:58px;line-height:1;margin-bottom:14px;">🔒</div>
-        <h2 style="margin:0 0 10px;font-size:32px;letter-spacing:-.5px;">PZ Focus &amp; Follow</h2>
-        <p style="margin:0 0 26px;color:#c7cfdf;font-size:18px;">Enter the password to continue.</p>
+        <div style="position:relative;">
+          <button type="button" id="pz-theme-toggle" aria-label="Toggle light and dark mode" style="
+            position:absolute;right:0;top:-8px;width:42px;height:34px;border:0;border-radius:17px;
+            background:rgba(127,127,127,.16);font-size:17px;line-height:1;
+            touch-action:manipulation;padding:0;
+          "></button>
+          <div id="pz-lock-icon" style="font-size:38px;line-height:1;margin:0 0 18px;">🔒</div>
+          <h2 id="pz-lock-title" style="margin:0 0 8px;font-size:23px;line-height:1.15;letter-spacing:-.25px;font-weight:700;">Enter Store Passcode</h2>
+          <p id="pz-lock-subtitle" style="margin:0 0 27px;font-size:14px;line-height:1.3;">Session expires every 1 hour on each device</p>
+        </div>
 
-        <div id="pz-pin-dots" style="display:flex;justify-content:center;gap:18px;margin:0 0 28px;">
+        <div id="pz-pin-dots" style="display:flex;justify-content:center;gap:17px;margin:0 0 29px;height:16px;">
           ${[0,1,2,3].map(i=>`<span data-pin-dot="${i}" style="
-            width:18px;height:18px;border-radius:50%;display:block;
-            border:2px solid #9eadd0;background:transparent;box-sizing:border-box;
+            width:16px;height:16px;border-radius:50%;display:block;
+            border:2px solid; background:transparent;box-sizing:border-box;
+            transition:background .12s ease,box-shadow .12s ease,border-color .12s ease;
           "></span>`).join("")}
         </div>
 
         <input id="pz-password-input" type="password" inputmode="numeric"
-               autocomplete="off" aria-label="Password"
+               autocomplete="off" aria-label="Store passcode"
                style="position:absolute;left:-10000px;width:1px;height:1px;opacity:0;">
 
         <div id="pz-keypad" style="
-          display:grid;grid-template-columns:repeat(3,1fr);
-          gap:14px;max-width:390px;margin:0 auto 28px;
+          display:grid;grid-template-columns:repeat(3,80px);
+          grid-auto-rows:80px;gap:15px;justify-content:center;
+          margin:0 auto 0;
         ">
-          ${["1","2","3","4","5","6","7","8","9","⌫","0",""].map((n,i)=>
-            n ? `<button type="button" data-key="${n}" style="
-              height:78px;border-radius:50%;border:1px solid rgba(160,180,225,.42);
-              background:linear-gradient(145deg,rgba(75,87,116,.82),rgba(38,45,64,.92));
-              color:#fff;font-size:${n==="⌫"?"28":"28"}px;font-weight:600;
-              box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 5px 14px rgba(0,0,0,.25);
-              touch-action:manipulation;
-            ">${n}</button>` : `<div></div>`
+          ${["1","2","3","4","5","6","7","8","9","change","0","⌫"].map(n=>
+            n==="change"
+              ? `<button type="button" data-change-pin="true" style="
+                  height:80px;width:80px;border:0;background:transparent;
+                  font-size:14px;font-weight:500;touch-action:manipulation;padding:0;
+                ">Change PIN</button>`
+              : `<button type="button" data-key="${n}" aria-label="${n==='⌫'?'Delete':n}" style="
+                  height:80px;width:80px;border-radius:50%;border:1px solid;
+                  font-size:28px;font-weight:600;
+                  touch-action:manipulation;padding:0;
+                  transition:background .2s ease,color .2s ease,border-color .2s ease,box-shadow .2s ease;
+                ">${n}</button>`
           ).join("")}
         </div>
 
-        <button id="pz-password-submit" type="button" style="
-          width:100%;max-width:390px;height:62px;border:0;border-radius:32px;
-          background:linear-gradient(180deg,#2d7cff,#0f5eea);
-          color:#fff;font-size:20px;font-weight:700;
-          box-shadow:0 8px 24px rgba(24,105,255,.34);
-          touch-action:manipulation;
-        ">Enter</button>
-
-        <div id="pz-password-error" style="display:none;color:#ff8f9a;margin-top:15px;font-size:16px;">
-          Incorrect password.
+        <div id="pz-password-error" style="display:none;margin-top:18px;font-size:14px;">
+          Incorrect passcode.
         </div>
       </div>`;
+
+    function applyLockTheme(theme) {
+      const dark = theme === "dark";
+      const colors = dark ? {
+        bg:"#111113", text:"#f5f5f7", secondary:"#9a9a9f", dot:"#77777c",
+        keyBg:"#303033", keyText:"#fff", keyBorder:"#505055", keyShadow:"inset 0 1px 0 rgba(255,255,255,.06),0 1px 2px rgba(0,0,0,.35)",
+        filled:"#f2f2f4", toggle:"rgba(127,127,127,.16)", error:"#ff8f9a"
+      } : {
+        bg:"#f2f2f7", text:"#1c1c1e", secondary:"#6e6e73", dot:"#8e8e93",
+        keyBg:"#e5e5ea", keyText:"#1c1c1e", keyBorder:"#d1d1d6", keyShadow:"inset 0 1px 0 rgba(255,255,255,.85),0 1px 2px rgba(0,0,0,.12)",
+        filled:"#1c1c1e", toggle:"rgba(60,60,67,.10)", error:"#d70015"
+      };
+      gate.style.background = colors.bg;
+      gate.style.color = colors.text;
+      document.getElementById("pz-lock-title").style.color = colors.text;
+      document.getElementById("pz-lock-subtitle").style.color = colors.secondary;
+      const toggle = document.getElementById("pz-theme-toggle");
+      toggle.textContent = dark ? "☀️" : "🌙";
+      toggle.style.background = colors.toggle;
+      toggle.title = dark ? "Switch to light mode" : "Switch to dark mode";
+      gate.querySelectorAll("[data-pin-dot]").forEach(dot=>{
+        dot.style.borderColor = colors.dot;
+        if (dot.dataset.filled === "true") { dot.style.background=colors.filled; dot.style.borderColor=colors.filled; }
+      });
+      gate.querySelectorAll("[data-key]").forEach(btn=>{
+        btn.style.background = colors.keyBg;
+        btn.style.color = colors.keyText;
+        btn.style.borderColor = colors.keyBorder;
+        btn.style.boxShadow = colors.keyShadow;
+      });
+      const change = gate.querySelector("[data-change-pin]");
+      change.style.color = colors.secondary;
+      const error = document.getElementById("pz-password-error");
+      error.style.color = colors.error;
+      gate.dataset.theme = theme;
+    }
+    let pzLockTheme = pzGetLockTheme();
+    applyLockTheme(pzLockTheme);
+    document.getElementById("pz-theme-toggle").addEventListener("click", ()=>{
+      pzLockTheme = pzLockTheme === "dark" ? "light" : "dark";
+      localStorage.setItem(PZ_LOCK_THEME_KEY, pzLockTheme);
+      applyLockTheme(pzLockTheme);
+    });
 
     document.body.appendChild(gate);
     document.body.style.overflow = "hidden";
 
     const input = document.getElementById("pz-password-input");
-    const submit = document.getElementById("pz-password-submit");
     const error = document.getElementById("pz-password-error");
     const dots = [...gate.querySelectorAll("[data-pin-dot]")];
     let pin = "";
 
     function renderPin() {
       dots.forEach((dot,i)=>{
-        dot.style.background = i < pin.length ? "#fff" : "transparent";
-        dot.style.boxShadow = i < pin.length ? "0 0 10px rgba(255,255,255,.65)" : "none";
+        const filled = i < pin.length;
+        dot.dataset.filled = filled ? "true" : "false";
+        const dark = gate.dataset.theme === "dark";
+        const fill = dark ? "#f2f2f4" : "#1c1c1e";
+        const empty = dark ? "#77777c" : "#8e8e93";
+        dot.style.background = filled ? fill : "transparent";
+        dot.style.borderColor = filled ? fill : empty;
+        dot.style.boxShadow = filled ? (dark ? "0 0 7px rgba(255,255,255,.35)" : "0 0 7px rgba(0,0,0,.18)") : "none";
       });
       input.value = pin;
     }
@@ -113,7 +171,7 @@
         sessionStorage.setItem(PZ_AUTH_TIME_KEY, String(Date.now()));
         gate.remove();
         document.body.style.overflow = "";
-      } else {
+      } else if (pin.length) {
         error.style.display = "block";
         pin = "";
         renderPin();
@@ -125,18 +183,29 @@
         const key=btn.getAttribute("data-key");
         error.style.display="none";
         if(key==="⌫") pin=pin.slice(0,-1);
-        else if(pin.length<8) pin += key;
+        else if(pin.length<4) pin += key;
         renderPin();
       });
     });
-    submit.addEventListener("click", unlock);
+
+    // Keep the same 4-digit PIN behavior as the existing PZ gate.
+    // The Change PIN control is intentionally visual-only here so the store PIN
+    // remains the same across every device using this shared app.
+    gate.querySelector("[data-change-pin]")?.addEventListener("click", ()=>{
+      error.style.display = "block";
+      error.style.color = "#b8b8bc";
+      error.textContent = "Store PIN is managed centrally.";
+      setTimeout(()=>{ if(error) error.style.display="none"; }, 2200);
+    });
+
     gate.addEventListener("keydown", e=>{
-      if(e.key>="0" && e.key<="9" && pin.length<8) { pin+=e.key; renderPin(); }
-      if(e.key==="Backspace") { pin=pin.slice(0,-1); renderPin(); }
+      if(e.key>="0" && e.key<="9" && pin.length<4) { error.style.display="none"; pin+=e.key; renderPin(); }
+      if(e.key==="Backspace") { error.style.display="none"; pin=pin.slice(0,-1); renderPin(); }
       if(e.key==="Enter") unlock();
     });
     gate.tabIndex=0;
     gate.focus();
+    renderPin();
   }
 
   function pzLockNow() {
@@ -550,12 +619,6 @@
     border-collapse: separate;
     border-spacing: 0;
     font-size: 13px;
-  }
-
-  /* Prevent the local role-grouped roster from flashing before the shared
-     Supabase roster is hydrated. Reveal only the final cloud-sorted state. */
-  #tableBody.pz-initial-loading {
-    visibility: hidden;
   }
 
   /* Sortable Headers */
@@ -2886,7 +2949,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       // Pull the latest shared cloud state immediately before archiving so an
       // iPad with a stale local copy can never overwrite a newer device.
       const cloudRows=await pzRestRequest(
-        PZ_MEMBERS_TABLE+"?select=*&removed=eq.false&order=name.asc",{},key
+        PZ_MEMBERS_TABLE+"?select=*&removed=eq.false&order=id",{},key
       );
       const cloudData=(Array.isArray(cloudRows)?cloudRows:[]).map(pzFromCloud);
 
@@ -3859,14 +3922,6 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   // The iPads no longer decide which local copy is authoritative. Supabase
   // owns today's live state. MQTT remains loaded for compatibility, but it is
   // NOT used for live tracker data in this version.
-  function setPzInitialBoardReady(ready) {
-    const tbody = document.getElementById('tableBody');
-    if (tbody) {
-      if (ready) tbody.classList.remove('pz-initial-loading');
-      else tbody.classList.add('pz-initial-loading');
-    }
-  }
-
   async function hydrateFromCloud() {
   if (!supabaseClient) throw new Error('Supabase client not ready');
   const { data: rows, error } = await supabaseClient
@@ -3926,7 +3981,7 @@ function pzUnique(list){
 async function pzCloudLoad(){
   const key=window.PZ_WORKING_API_KEY||SUPABASE_PUBLISHABLE_KEY;
   const rows=await pzRestRequest(
-    PZ_MEMBERS_TABLE+"?select=*&removed=eq.false&order=name.asc",{},key
+    PZ_MEMBERS_TABLE+"?select=*&removed=eq.false&order=id",{},key
   );
   const cloudRows=Array.isArray(rows)?rows:[];
   const activeByName=new Map(
@@ -4125,7 +4180,7 @@ async function initSupabaseSync(){
     }
 
     // Load today's shared roster through REST.
-    const rows=await pzRestRequest(PZ_MEMBERS_TABLE+"?select=*&removed=eq.false&order=name.asc",{},
+    const rows=await pzRestRequest(PZ_MEMBERS_TABLE+"?select=*&removed=eq.false&order=id",{},
       workingKey);
     const cloudRows=Array.isArray(rows)?rows:[];
     data=pzUnique(cloudRows.map(pzFromCloud));
@@ -4134,7 +4189,6 @@ async function initSupabaseSync(){
     renderTableStructure();
     updateTotals();
     reorderRows();
-    setPzInitialBoardReady(true);
 
     // Mark this device's live board with the day it belongs to, but NEVER
     // overwrite an existing older stamp. An older stamp is what lets the
@@ -4188,17 +4242,12 @@ async function initSupabaseSync(){
     return true;
   }catch(e){
     supabaseReady=false;
-    setPzInitialBoardReady(true);
     console.error("PZ CLOUD INIT FAILED",e);
     setSyncBadge("🔴 PZ Cloud Sync Failed");
     console.error("PZ CLOUD CONNECTION DETAIL:", e && e.message ? e.message : e);
     return false;
   }
 }
-
-// Keep the initial static/local roster hidden while Supabase determines the
-// authoritative order. This eliminates the role-grouped -> first-name flash.
-setPzInitialBoardReady(false);
 
 window.addEventListener('load', function(){
   setTimeout(function(){
