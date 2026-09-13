@@ -2181,15 +2181,49 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     }
   }
 
-  function checkAll(status) {
+  async function checkAll(status) {
     if (currentTab !== 'daily') return;
     pushUndoSnapshot();
+
+    // "Clear Check-Ins" on PZ also starts a clean live board, matching GB:
+    // clear check-ins AND all daily metrics in one operation.
+    if (status === false) {
+      data.forEach(d => {
+        d.checkedIn = false;
+        d.ac = 0;
+        d.pz = 0;
+        d.services = 0;
+        d.biz = 0;
+        d.acc = 0;
+        d.step = '';
+        d.notes = '';
+        stampEdit(d);
+        renderCheckInVisual(d.id);
+        renderRow(d.id);
+      });
+      updateTotals();
+      saveLocalState();
+      broadcastChange();
+
+      // One cloud reset keeps every PZ iPad on the same clean state and
+      // avoids sending a separate write for every team member.
+      if (supabaseReady) {
+        const ok = await supabaseResetDay();
+        if (!ok) return;
+      }
+
+      data.forEach(d => publishMemberCheckIn(d));
+      setTimeout(reorderRows, 60);
+      return;
+    }
+
     data.forEach(d => {
       d.checkedIn = status;
       stampEdit(d);
       renderCheckInVisual(d.id);
     });
     updateTotals();
+    saveLocalState();
     broadcastChange();
     data.forEach(d => publishMemberCheckIn(d));
     setTimeout(reorderRows, 60);
