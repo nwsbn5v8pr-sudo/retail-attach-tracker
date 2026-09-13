@@ -1754,10 +1754,8 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     }
 
     if (currentTab === 'priorday') {
-      // "Prior Day" is the most recently COMPLETED archived shift. At 9:01 PM
-      // today's shift becomes completed, so today's archive should immediately
-      // become Prior Day. Before 9:01 PM, the latest archive is normally
-      // yesterday's shift.
+      // "Prior Day" is the most recently COMPLETED archived shift.
+      // A shift is completed when the calendar day changes and it is archived.
       const priorRecord = historyRecords
         .slice()
         .sort((a,b)=>parseDateSafe(b.date)-parseDateSafe(a.date))[0];
@@ -3011,8 +3009,6 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   async function scheduledPzDailyArchive(){
     const now=new Date();
     const today=getTodayString();
-    const hh=now.getHours();
-    const mm=now.getMinutes();
 
     let liveDay=null;
     try{liveDay=localStorage.getItem(STORAGE_KEY_LIVE_DAY);}catch(e){}
@@ -3020,19 +3016,12 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     let lastArchived=null;
     try{lastArchived=localStorage.getItem("pz_last_daily_archive_date");}catch(e){}
 
-    // Exact requested daily rollover: 9:01 PM local Pacific time.
-    if(hh===21 && mm===1 && lastArchived!==today){
-      // Only a device whose live board is stamped TODAY may perform the scheduled archive.
-      if (liveDay === today && stateHydrated) {
-        await archiveAndClearPzDay(today,"scheduled-9:01pm");
-      }
-      return;
-    }
-
-    // Catch-up protection: if an iPad was asleep/closed at 9:01 PM, archive
-    // the day its live board actually belongs to as soon as it comes back.
+    // Date-change rollover: there is NO fixed rollover time.
+    // When the calendar day changes, archive the previous live shift.
+    // The cloud archive function is the safety gate: if saving fails,
+    // the live board is never cleared.
     if(liveDay && liveDay!==today && lastArchived!==liveDay && stateHydrated){
-      await archiveAndClearPzDay(liveDay,"catch-up-after-9:01pm");
+      await archiveAndClearPzDay(liveDay,"calendar-day-change");
     }
   }
 
@@ -3048,9 +3037,8 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       }
     }
 
-    // 15-second polling makes the 9:01 PM rollover reliable without requiring
-    // the browser to be open at the exact second. The cloud archive is the
-    // safety gate: if saving fails, the live day is never cleared.
+    // Poll frequently so a calendar-day change is caught automatically.
+    // The cloud archive is the safety gate: if saving fails, the live day is never cleared.
     setInterval(runEngines,15000);
     runEngines();
   }
