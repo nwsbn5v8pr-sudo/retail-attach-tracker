@@ -2212,7 +2212,9 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
         if (!ok) return;
       }
 
-      data.forEach(d => publishMemberCheckIn(d));
+      // Supabase is the source of truth for the bulk reset. Do not publish
+      // individual legacy MQTT check-in messages here because delayed MQTT
+      // messages can resurrect stale notes/metrics on another iPad.
       setTimeout(reorderRows, 60);
       return;
     }
