@@ -1062,8 +1062,187 @@
     .member-name, .role-tag { max-width: 150px; }
   }
 </style>
+
+<style id="pz-static-passgate-style">
+  #pz-password-gate {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 2147483647 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    min-height: 100vh !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: #111113;
+    color: #f5f5f7;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  #pz-password-gate.pz-gate-hidden {
+    display: none !important;
+  }
+  #pz-password-gate .pz-gate-inner {
+    width: min(420px, calc(100vw - 40px));
+    text-align: center;
+    box-sizing: border-box;
+  }
+  #pz-password-gate .pz-gate-theme {
+    position: fixed;
+    top: max(18px, env(safe-area-inset-top));
+    right: max(18px, env(safe-area-inset-right));
+    width: 42px;
+    height: 42px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(127,127,127,.14);
+    color: inherit;
+    font-size: 18px;
+    line-height: 42px;
+    padding: 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #pz-password-gate .pz-lock-icon {
+    font-size: 38px;
+    line-height: 1;
+    margin-bottom: 18px;
+  }
+  #pz-password-gate .pz-title {
+    margin: 0 0 8px;
+    font-size: 23px;
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -.25px;
+  }
+  #pz-password-gate .pz-subtitle {
+    margin: 0 0 27px;
+    font-size: 14px;
+    line-height: 1.3;
+  }
+  #pz-password-gate .pz-dots {
+    display: flex;
+    justify-content: center;
+    gap: 17px;
+    height: 16px;
+    margin-bottom: 29px;
+  }
+  #pz-password-gate .pz-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid #77777c;
+    background: transparent;
+    box-sizing: border-box;
+  }
+  #pz-password-gate .pz-dot.filled {
+    background: #f2f2f4;
+    border-color: #f2f2f4;
+  }
+  #pz-password-gate .pz-keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 80px);
+    grid-auto-rows: 80px;
+    gap: 15px;
+    justify-content: center;
+  }
+  #pz-password-gate .pz-key {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: 1px solid #505055;
+    background: #303033;
+    color: #fff;
+    font-size: 28px;
+    font-weight: 600;
+    padding: 0;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 1px 2px rgba(0,0,0,.35);
+  }
+  #pz-password-gate .pz-key:active {
+    transform: scale(.94);
+    background: #444448;
+  }
+  #pz-password-gate .pz-change {
+    width: 80px;
+    height: 80px;
+    border: 0;
+    background: transparent;
+    color: #9a9a9f;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 0;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #pz-password-gate .pz-delete {
+    font-size: 21px;
+  }
+  #pz-password-gate .pz-error {
+    min-height: 20px;
+    margin-top: 17px;
+    color: #ff8f9a;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  /* Light mode */
+  #pz-password-gate.pz-light {
+    background: #f2f2f7;
+    color: #1c1c1e;
+  }
+  #pz-password-gate.pz-light .pz-subtitle { color: #6e6e73; }
+  #pz-password-gate.pz-light .pz-dot { border-color: #8e8e93; }
+  #pz-password-gate.pz-light .pz-dot.filled { background: #1c1c1e; border-color: #1c1c1e; }
+  #pz-password-gate.pz-light .pz-key {
+    background: #e5e5ea;
+    color: #1c1c1e;
+    border-color: #d1d1d6;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.85), 0 1px 2px rgba(0,0,0,.12);
+  }
+  #pz-password-gate.pz-light .pz-key:active { background: #d1d1d6; }
+  #pz-password-gate.pz-light .pz-change { color: #6e6e73; }
+  #pz-password-gate.pz-light .pz-error { color: #d70015; }
+  #pz-password-gate.pz-light .pz-gate-theme { background: rgba(60,60,67,.10); }
+</style>
+
 </head>
 <body>
+
+<!-- STATIC PZ PASSCODE GATE: visible on the first paint; JavaScript only unlocks it. -->
+<div id="pz-password-gate" aria-modal="true" role="dialog" aria-label="Store passcode">
+  <button type="button" class="pz-gate-theme" id="pz-static-theme" aria-label="Toggle light and dark mode">☀️</button>
+  <div class="pz-gate-inner">
+    <div class="pz-lock-icon">🔒</div>
+    <h2 class="pz-title">Enter Store Passcode</h2>
+    <p class="pz-subtitle">Session expires every 1 hour on each device</p>
+    <div class="pz-dots" id="pz-static-dots">
+      <span class="pz-dot"></span><span class="pz-dot"></span><span class="pz-dot"></span><span class="pz-dot"></span>
+    </div>
+    <div class="pz-keypad" id="pz-static-keypad">
+      <button type="button" class="pz-key" data-pz-static-key="1">1</button>
+      <button type="button" class="pz-key" data-pz-static-key="2">2</button>
+      <button type="button" class="pz-key" data-pz-static-key="3">3</button>
+      <button type="button" class="pz-key" data-pz-static-key="4">4</button>
+      <button type="button" class="pz-key" data-pz-static-key="5">5</button>
+      <button type="button" class="pz-key" data-pz-static-key="6">6</button>
+      <button type="button" class="pz-key" data-pz-static-key="7">7</button>
+      <button type="button" class="pz-key" data-pz-static-key="8">8</button>
+      <button type="button" class="pz-key" data-pz-static-key="9">9</button>
+      <button type="button" class="pz-change" id="pz-static-change">Change PIN</button>
+      <button type="button" class="pz-key" data-pz-static-key="0">0</button>
+      <button type="button" class="pz-key pz-delete" data-pz-static-key="delete" aria-label="Delete">⌫</button>
+    </div>
+    <div class="pz-error" id="pz-static-error" aria-live="polite"></div>
+  </div>
+</div>
+
 
 
   <!-- Team Member Removal -->
