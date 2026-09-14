@@ -214,13 +214,27 @@
   // Explicitly expose the lock controls on window so Safari/iPad inline
   // onclick handlers can always reach them.
   function pzLockNow() {
+    // HARD LOCK: invalidate the current session first, then force a fresh gate.
+    // Never rely on an existing/hidden gate instance.
     try {
       sessionStorage.removeItem(PZ_AUTH_KEY);
       sessionStorage.removeItem(PZ_AUTH_TIME_KEY);
     } catch (e) {}
+    const existing = document.getElementById("pz-password-gate");
+    if (existing) {
+      try { existing.remove(); } catch (e) { existing.style.display = "flex"; }
+    }
     pzShowPasswordGate();
     const gate=document.getElementById("pz-password-gate");
-    if(gate){ gate.style.display="flex"; gate.style.zIndex="2147483647"; gate.focus(); }
+    if(gate){
+      gate.style.display="flex";
+      gate.style.visibility="visible";
+      gate.style.opacity="1";
+      gate.style.zIndex="2147483647";
+      document.body.style.overflow="hidden";
+      try { gate.focus(); } catch (e) {}
+    }
+    return false;
   }
 
   function pzEnforcePassword() {
@@ -4351,18 +4365,46 @@ window.addEventListener('load', function(){
   },250);
 });
 
-window.addEventListener('load', function(){
-  // Defensive binding for the More -> Lock action on Safari/iPad.
-  const lockBtn = document.getElementById('pzLockMenuButton');
-  if (lockBtn) {
-    lockBtn.addEventListener('click', function(e){
+// ================================================================
+// PZ LOCK WATCHDOG — isolated from the app so a later app error cannot
+// disable the lock. Uses delegated capture events because the More menu
+// can be interacted with on Safari/iPad in ways that make direct bindings
+// unreliable.
+// ================================================================
+(function(){
+  function enforce(){
+    try {
+      if (typeof window.pzEnforcePassword === 'function') window.pzEnforcePassword();
+    } catch (e) {}
+  }
+
+  function start(){
+    // Enforce immediately and then every 2 seconds.
+    enforce();
+    if (window.__pzHardLockWatchdog) clearInterval(window.__pzHardLockWatchdog);
+    window.__pzHardLockWatchdog = setInterval(enforce, 2000);
+
+    // Capture BEFORE the menu's own handlers. This guarantees Lock wins.
+    const lockEvent = function(e){
+      const el = e.target && e.target.closest ? e.target.closest('#pzLockMenuButton') : null;
+      if (!el) return;
       e.preventDefault();
       e.stopPropagation();
-      try { closeMoreMenu(); } catch (_) {}
-      window.pzLockNow();
-    }, true);
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+      try { if (typeof closeMoreMenu === 'function') closeMoreMenu(); } catch (_) {}
+      try { if (typeof window.pzLockNow === 'function') window.pzLockNow(); } catch (_) {}
+    };
+    document.addEventListener('pointerdown', lockEvent, true);
+    document.addEventListener('touchstart', lockEvent, true);
+    document.addEventListener('click', lockEvent, true);
+
+    const recheck = function(){ enforce(); };
+    document.addEventListener('visibilitychange', recheck);
+    window.addEventListener('focus', recheck);
+    window.addEventListener('pageshow', recheck);
   }
-  pzEnforcePassword();
-  pzStartHourlyPasswordCheck();
-});
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, {once:true});
+  else start();
+})();
 </script>
