@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>🛍️PZ Focus & Follow 🆙</title>
-<!-- PZ MASTER: lock gate + light/dark + HARD LOCK ENFORCEMENT + full prior-day roster + flicker fixes -->
+<!-- PZ MASTER: lock gate + light/dark + HARD LOCK ENFORCEMENT v2 + full prior-day roster + flicker fixes -->
 <!-- Lightweight MQTT over WebSockets for Instant Serverless Cloud Sync -->
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <script>
@@ -13,6 +13,7 @@
   const PZ_AUTH_KEY = "pz_focus_follow_authenticated_v3";
   const PZ_AUTH_TIME_KEY = "pz_focus_follow_authenticated_at_v1";
   const PZ_AUTH_INTERVAL_MS = 60 * 60 * 1000;
+  const PZ_FORCE_LOCK_KEY = "pz_focus_follow_force_lock_v1";
   const PZ_LOCK_THEME_KEY = "pz_focus_follow_lock_theme_v1";
 
   function pzGetLockTheme() {
@@ -22,6 +23,13 @@
   }
 
   function pzIsAuthenticated() {
+    // A manual Lock sets this flag before reloading, guaranteeing the next
+    // page state is locked even if Safari restores an authenticated session.
+    if (sessionStorage.getItem(PZ_FORCE_LOCK_KEY) === "true") {
+      sessionStorage.removeItem(PZ_AUTH_KEY);
+      sessionStorage.removeItem(PZ_AUTH_TIME_KEY);
+      return false;
+    }
     if (sessionStorage.getItem(PZ_AUTH_KEY) !== "true") return false;
     const authenticatedAt = Number(sessionStorage.getItem(PZ_AUTH_TIME_KEY) || 0);
     if (!authenticatedAt || (Date.now() - authenticatedAt) >= PZ_AUTH_INTERVAL_MS) {
@@ -168,6 +176,7 @@
 
     function unlock() {
       if (pin === PZ_ACCESS_PASSWORD) {
+        sessionStorage.removeItem(PZ_FORCE_LOCK_KEY);
         sessionStorage.setItem(PZ_AUTH_KEY, "true");
         sessionStorage.setItem(PZ_AUTH_TIME_KEY, String(Date.now()));
         gate.remove();
@@ -214,26 +223,18 @@
   // Explicitly expose the lock controls on window so Safari/iPad inline
   // onclick handlers can always reach them.
   function pzLockNow() {
-    // HARD LOCK: invalidate the current session first, then force a fresh gate.
-    // Never rely on an existing/hidden gate instance.
+    // HARD LOCK: persist an explicit lock request, invalidate authentication,
+    // then reload. Reloading is intentional: it makes Safari/iPad re-enter
+    // the exact same gate path used on a fresh page load.
     try {
+      sessionStorage.setItem(PZ_FORCE_LOCK_KEY, "true");
       sessionStorage.removeItem(PZ_AUTH_KEY);
       sessionStorage.removeItem(PZ_AUTH_TIME_KEY);
     } catch (e) {}
-    const existing = document.getElementById("pz-password-gate");
-    if (existing) {
-      try { existing.remove(); } catch (e) { existing.style.display = "flex"; }
-    }
-    pzShowPasswordGate();
-    const gate=document.getElementById("pz-password-gate");
-    if(gate){
-      gate.style.display="flex";
-      gate.style.visibility="visible";
-      gate.style.opacity="1";
-      gate.style.zIndex="2147483647";
-      document.body.style.overflow="hidden";
-      try { gate.focus(); } catch (e) {}
-    }
+    try {
+      closeMoreMenu();
+    } catch (e) {}
+    window.location.reload();
     return false;
   }
 
@@ -265,6 +266,11 @@
     window.addEventListener('focus', recheck);
     window.addEventListener('pageshow', recheck);
   }
+
+  // Start the session watchdog immediately. It is safe before the body exists
+  // because it only registers timers/listeners; the gate itself is created
+  // later when authentication is checked.
+  pzStartHourlyPasswordCheck();
 
 </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1079,7 +1085,7 @@
           <button type="button" onclick="checkAll(false);closeMoreMenu()">◻️ Clear Check-Ins</button>
           <button type="button" onclick="manualRollOverDay();closeMoreMenu()">💾 Save & Start New Day</button>
           <button type="button" onclick="exportCSV();closeMoreMenu()">📥 Export CSV</button>
-          <button type="button" id="pzLockMenuButton" onclick="try{closeMoreMenu();}catch(e){}; window.pzLockNow(); return false;">🔒 Lock</button>
+          <button type="button" id="pzLockMenuButton" onclick="return window.pzLockNow();">🔒 Lock</button>
           <button type="button" class="menu-danger" onclick="resetCounts();closeMoreMenu()">🔄 Reset Day</button>
         </div>
       </div>
@@ -4365,46 +4371,4 @@ window.addEventListener('load', function(){
   },250);
 });
 
-// ================================================================
-// PZ LOCK WATCHDOG — isolated from the app so a later app error cannot
-// disable the lock. Uses delegated capture events because the More menu
-// can be interacted with on Safari/iPad in ways that make direct bindings
-// unreliable.
-// ================================================================
-(function(){
-  function enforce(){
-    try {
-      if (typeof window.pzEnforcePassword === 'function') window.pzEnforcePassword();
-    } catch (e) {}
-  }
-
-  function start(){
-    // Enforce immediately and then every 2 seconds.
-    enforce();
-    if (window.__pzHardLockWatchdog) clearInterval(window.__pzHardLockWatchdog);
-    window.__pzHardLockWatchdog = setInterval(enforce, 2000);
-
-    // Capture BEFORE the menu's own handlers. This guarantees Lock wins.
-    const lockEvent = function(e){
-      const el = e.target && e.target.closest ? e.target.closest('#pzLockMenuButton') : null;
-      if (!el) return;
-      e.preventDefault();
-      e.stopPropagation();
-      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-      try { if (typeof closeMoreMenu === 'function') closeMoreMenu(); } catch (_) {}
-      try { if (typeof window.pzLockNow === 'function') window.pzLockNow(); } catch (_) {}
-    };
-    document.addEventListener('pointerdown', lockEvent, true);
-    document.addEventListener('touchstart', lockEvent, true);
-    document.addEventListener('click', lockEvent, true);
-
-    const recheck = function(){ enforce(); };
-    document.addEventListener('visibilitychange', recheck);
-    window.addEventListener('focus', recheck);
-    window.addEventListener('pageshow', recheck);
-  }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, {once:true});
-  else start();
-})();
 </script>
