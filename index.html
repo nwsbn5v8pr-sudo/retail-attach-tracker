@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>🛍️PZ Focus & Follow 🆙</title>
-<!-- PZ MASTER: lock gate + light/dark + full prior-day roster + flicker fixes -->
+<!-- PZ MASTER: lock gate + light/dark + enforced 1-hour session + full prior-day roster + flicker fixes -->
 <!-- Lightweight MQTT over WebSockets for Instant Serverless Cloud Sync -->
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <script>
@@ -221,6 +221,23 @@
 
   function pzEnforcePassword() {
     if (!pzIsAuthenticated()) pzShowPasswordGate();
+  }
+
+  // Re-check the 1-hour session continuously and whenever the app becomes
+  // active again. This is what makes the lock gate actually reappear after
+  // the session expires instead of only checking once at page load.
+  function pzStartHourlyPasswordCheck() {
+    if (window.__pzPasswordTimer) clearInterval(window.__pzPasswordTimer);
+    window.__pzPasswordTimer = setInterval(() => {
+      pzEnforcePassword();
+    }, 15000);
+
+    const recheck = () => {
+      if (document.visibilityState === 'visible') pzEnforcePassword();
+    };
+    document.addEventListener('visibilitychange', recheck);
+    window.addEventListener('focus', recheck);
+    window.addEventListener('pageshow', recheck);
   }
 
 </script>
