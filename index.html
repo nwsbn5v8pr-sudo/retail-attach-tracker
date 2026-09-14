@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>🛍️PZ Focus & Follow 🆙</title>
-<!-- PZ MASTER: lock gate + light/dark + enforced 1-hour session + full prior-day roster + flicker fixes -->
+<!-- PZ MASTER: lock gate + light/dark + HARD LOCK ENFORCEMENT + full prior-day roster + flicker fixes -->
 <!-- Lightweight MQTT over WebSockets for Instant Serverless Cloud Sync -->
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <script>
@@ -172,6 +172,8 @@
         sessionStorage.setItem(PZ_AUTH_TIME_KEY, String(Date.now()));
         gate.remove();
         document.body.style.overflow = "";
+        // Restart the session timestamp from this successful unlock.
+        sessionStorage.setItem(PZ_AUTH_TIME_KEY, String(Date.now()));
       } else if (pin.length) {
         error.style.display = "block";
         pin = "";
@@ -209,6 +211,8 @@
     renderPin();
   }
 
+  // Explicitly expose the lock controls on window so Safari/iPad inline
+  // onclick handlers can always reach them.
   function pzLockNow() {
     try {
       sessionStorage.removeItem(PZ_AUTH_KEY);
@@ -223,14 +227,22 @@
     if (!pzIsAuthenticated()) pzShowPasswordGate();
   }
 
+  // Safari/iPad-safe public handlers. Do not rely on implicit global function
+  // exposure for inline menu handlers.
+  window.pzLockNow = pzLockNow;
+  window.pzEnforcePassword = pzEnforcePassword;
+  window.pzShowPasswordGate = pzShowPasswordGate;
+
   // Re-check the 1-hour session continuously and whenever the app becomes
   // active again. This is what makes the lock gate actually reappear after
   // the session expires instead of only checking once at page load.
   function pzStartHourlyPasswordCheck() {
     if (window.__pzPasswordTimer) clearInterval(window.__pzPasswordTimer);
     window.__pzPasswordTimer = setInterval(() => {
-      pzEnforcePassword();
-    }, 15000);
+      if (!pzIsAuthenticated()) {
+        pzShowPasswordGate();
+      }
+    }, 5000);
 
     const recheck = () => {
       if (document.visibilityState === 'visible') pzEnforcePassword();
@@ -1053,7 +1065,7 @@
           <button type="button" onclick="checkAll(false);closeMoreMenu()">◻️ Clear Check-Ins</button>
           <button type="button" onclick="manualRollOverDay();closeMoreMenu()">💾 Save & Start New Day</button>
           <button type="button" onclick="exportCSV();closeMoreMenu()">📥 Export CSV</button>
-          <button type="button" onclick="window.pzLockNow(); closeMoreMenu(); return false;">🔒 Lock</button>
+          <button type="button" id="pzLockMenuButton" onclick="try{closeMoreMenu();}catch(e){}; window.pzLockNow(); return false;">🔒 Lock</button>
           <button type="button" class="menu-danger" onclick="resetCounts();closeMoreMenu()">🔄 Reset Day</button>
         </div>
       </div>
@@ -4339,5 +4351,18 @@ window.addEventListener('load', function(){
   },250);
 });
 
-window.addEventListener('load', function(){ pzEnforcePassword(); pzStartHourlyPasswordCheck(); });
+window.addEventListener('load', function(){
+  // Defensive binding for the More -> Lock action on Safari/iPad.
+  const lockBtn = document.getElementById('pzLockMenuButton');
+  if (lockBtn) {
+    lockBtn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      try { closeMoreMenu(); } catch (_) {}
+      window.pzLockNow();
+    }, true);
+  }
+  pzEnforcePassword();
+  pzStartHourlyPasswordCheck();
+});
 </script>
