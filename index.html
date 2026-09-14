@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>🛍️PZ Focus & Follow 🆙</title>
-<!-- PZ MASTER: lock gate + light/dark + HARD LOCK ENFORCEMENT v2 + full prior-day roster + flicker fixes -->
+<!-- PZ MASTER: FIRST-LOAD LOCK + 1-HOUR SESSION + LIGHT/DARK + FULL PRIOR DAY + FLICKER FIXES -->
 <!-- Lightweight MQTT over WebSockets for Instant Serverless Cloud Sync -->
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <script>
   /* ================= PZ ACCESS PASSWORD ================= */
   const PZ_ACCESS_PASSWORD = "1984";
-  const PZ_AUTH_KEY = "pz_focus_follow_authenticated_v3";
+  const PZ_AUTH_KEY = "pz_focus_follow_authenticated_v4";
   const PZ_AUTH_TIME_KEY = "pz_focus_follow_authenticated_at_v1";
   const PZ_AUTH_INTERVAL_MS = 60 * 60 * 1000;
   const PZ_FORCE_LOCK_KEY = "pz_focus_follow_force_lock_v1";
@@ -271,6 +271,21 @@
   // because it only registers timers/listeners; the gate itself is created
   // later when authentication is checked.
   pzStartHourlyPasswordCheck();
+
+  // CRITICAL: always perform the initial authentication check after the DOM/body
+  // exists. Without this explicit first-load check, an unauthenticated fresh
+  // page could open directly to the tracker.
+  function pzInitialLockCheck() {
+    if (!pzIsAuthenticated()) {
+      pzShowPasswordGate();
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", pzInitialLockCheck, {once:true});
+  } else {
+    pzInitialLockCheck();
+  }
 
 </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
