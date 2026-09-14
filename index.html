@@ -1733,6 +1733,18 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     return new Date(dateStr);
   }
 
+  // "Prior Day" must never resolve to an archive stamped with TODAY's date.
+  // Today can legitimately end up in historyRecords (mid-shift "Save & Start
+  // New Day", a manual save, or a merged cloud record), and when it does a
+  // plain newest-first sort returns today -- which is why today's numbers
+  // were appearing under Prior Day and hiding yesterday's.
+  function getNewestPriorArchive() {
+    const todayStr = getTodayString();
+    return historyRecords
+      .filter(r => r && r.date && String(r.date) < todayStr)
+      .sort((a, b) => parseDateSafe(b.date) - parseDateSafe(a.date))[0] || null;
+  }
+
   function getWeekNumber(date) {
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
     const dayNum = d.getUTCDay() || 7;
@@ -2033,7 +2045,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       const overrideDate = window.__pzPriorRecordOverrideDate || '';
       const priorRecord = overrideDate
         ? (historyRecords.find(r => String(r.date) === String(overrideDate)) || null)
-        : historyRecords.slice().sort((a,b)=>parseDateSafe(b.date)-parseDateSafe(a.date))[0];
+        : getNewestPriorArchive();
 
       if (priorRecord) {
         // Always show the COMPLETE roster for Prior Day. Some older archives
@@ -3001,7 +3013,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       btnReset.style.display = 'none';
       if (btnAddMember) btnAddMember.style.display = 'none';
       document.getElementById('th-notes').textContent = 'Notes / Focus';
-      const newestArchive = historyRecords.slice().sort((a,b)=>parseDateSafe(b.date)-parseDateSafe(a.date))[0];
+      const newestArchive = getNewestPriorArchive();
       document.getElementById('tot-notes').textContent = newestArchive ? `Archive: ${newestArchive.date}` : 'No Prior Day Data';
     } else {
       if (periodSelector) periodSelector.style.display = 'inline-block';
