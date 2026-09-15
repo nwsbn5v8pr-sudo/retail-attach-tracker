@@ -4329,7 +4329,10 @@ function pzWrite(member,patch){
   const payload=pzCloudRow(member,patch);
   const key=window.PZ_WORKING_API_KEY||SUPABASE_PUBLISHABLE_KEY;
 
-  cloudQueue=cloudQueue.then(async()=>{
+  // Chain behind the previous write, but start from a SETTLED link. If the
+  // queue itself is left rejected, `.then()` skips its callback entirely and
+  // this write is dropped without ever reaching the network.
+  const attempt=cloudQueue.catch(function(){}).then(async()=>{
     // REST upsert is the primary persistence path.
     const rows=await pzRestRequest(
       PZ_MEMBERS_TABLE+"?on_conflict=id",
@@ -4340,7 +4343,11 @@ function pzWrite(member,patch){
     pzApply(row);
     return row;
   });
-  return cloudQueue;
+  // The shared queue only sequences writes -- it must never stay rejected, or
+  // one transient failure silently wedges every later save until a reload.
+  cloudQueue=attempt.catch(function(){});
+  // Callers still observe THIS write's own outcome.
+  return attempt;
 }
 async function supabaseSaveMemberPatch(member,patch){
   try{
