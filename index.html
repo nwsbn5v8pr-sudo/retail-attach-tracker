@@ -1765,10 +1765,16 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   // New Day", a manual save, or a merged cloud record), and when it does a
   // plain newest-first sort returns today -- which is why today's numbers
   // were appearing under Prior Day and hiding yesterday's.
+  // The most recently ARCHIVED shift, whatever date it carries.
+  // Deliberately NOT restricted to dates before today: "Save & Start New Day"
+  // archives the live day under TODAY's date and then clears the board, so
+  // that record is the prior shift even though its date is today. Excluding
+  // it left Prior Day showing the day before -- or nothing at all -- straight
+  // after a manual rollover. A date only reaches historyRecords once its
+  // shift has been archived, so there is no live day to confuse it with.
   function getNewestPriorArchive() {
-    const todayStr = getTodayString();
     return historyRecords
-      .filter(r => r && r.date && String(r.date) < todayStr)
+      .filter(r => r && r.date)
       .sort((a, b) => parseDateSafe(b.date) - parseDateSafe(a.date))[0] || null;
   }
 
