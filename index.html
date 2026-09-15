@@ -1743,12 +1743,51 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     );
   }
 
+  // ---- Business day ---------------------------------------------------------
+  // The tracker's day boundary is 22:00 Pacific, not local midnight. Anything
+  // logged after 22:00 Pacific belongs to the NEXT business day, so the live
+  // board's day changes at 10 PM and the existing "board's day != today, so
+  // archive it" engine performs the rollover with no clock check of its own.
+  // Pacific is resolved through the IANA zone, so this tracks PST and PDT
+  // rather than drifting an hour for the months the region is on summer time.
+  const ROLLOVER_TIME_ZONE = 'America/Los_Angeles';
+  const ROLLOVER_HOUR = 22;
+
+  // Calendar date and hour as they read on the Pacific clock at instant `d`.
+  function zonedParts(d) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: ROLLOVER_TIME_ZONE,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', hourCycle: 'h23'
+      }).formatToParts(d).reduce(function (acc, part) {
+        acc[part.type] = part.value; return acc;
+      }, {});
+      const hour = Number(parts.hour);
+      if (parts.year && parts.month && parts.day && hour >= 0 && hour <= 23) {
+        return { date: `${parts.year}-${parts.month}-${parts.day}`, hour: hour };
+      }
+    } catch (e) {}
+    // Intl or the zone is unavailable: fall back to this device's own clock so
+    // the tracker still rolls over once a day, just on local time.
+    return {
+      date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+      hour: d.getHours()
+    };
+  }
+
+  // Shift a YYYY-MM-DD string by whole days. Done in UTC so a daylight-saving
+  // transition can never make "+1 day" 23 or 25 hours and skip or repeat a date.
+  function shiftDateString(dateStr, days) {
+    const p = String(dateStr).split('-').map(Number);
+    const dt = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+    dt.setUTCDate(dt.getUTCDate() + days);
+    return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+  }
+
   function getTodayString() {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    const parts = zonedParts(new Date());
+    return parts.hour >= ROLLOVER_HOUR ? shiftDateString(parts.date, 1) : parts.date;
   }
 
   function parseDateSafe(dateStr) {
@@ -2141,7 +2180,9 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     }
 
     let relevantRecords = [];
-    const now = new Date();
+    // Bucket by the BUSINESS day, so the hours between 22:00 Pacific and
+    // midnight land in the same week/month as the shift they belong to.
+    const now = parseDateSafe(getTodayString());
 
     if (currentTab === 'weekly') {
       if (selectedPeriodKey === 'current') {
@@ -3079,7 +3120,9 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   function populatePeriodSelector(tab) {
     const sel = document.getElementById('periodSelector');
     sel.innerHTML = '';
-    const now = new Date();
+    // Same business-day basis as getDisplayList(), so the "current" option
+    // always names the period the live board is actually counting into.
+    const now = parseDateSafe(getTodayString());
 
     if (tab === 'weekly') {
       const curParts = getIsoWeekParts(now);
@@ -3441,7 +3484,6 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   }
 
   async function scheduledPzDailyArchive(){
-    const now=new Date();
     const today=getTodayString();
 
     let liveDay=null;
