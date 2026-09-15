@@ -3183,13 +3183,14 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     }
   }
 
-  /* ⏰ HOURLY AUTO-SAVE, 8:59 PM AUTO-SNAPSHOT & 11:59 PM MIDNIGHT RESET ENGINE */
+  /* ⏰ DAY-ROLLOVER ENGINE — fires on the calendar date changing, not on a clock time */
 
   // 📅 Robust day-rollover: archives `data` to the date it actually belongs
-  // to and clears the board for a new day. This does NOT depend on the app
-  // being open at a precise minute (8:59 PM / 11:59 PM) — it simply compares
+  // to and clears the board for a new day. There is no configured rollover
+  // time and nothing in this file reads the clock — it simply compares
   // "what day is the live board currently tracking?" vs. "what day is it
-  // right now?" every time this runs (on load, and every 30s tick). If the
+  // right now?" every time this runs (on load, and every 15s tick), so in
+  // practice it fires just after the device's own local midnight. If the
   // iPad was asleep, the tab was closed, or the passcode gate was up at
   // midnight, the very next time the app is opened it catches up correctly:
   // saves the stale day to Prior Day / History (which also feeds Weekly,
@@ -3384,7 +3385,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       flashAutoSaveBadge(`✅ ${archiveDate} Saved • New Day Started`);
       setSyncBadge("🟢 PZ Cloud Sync Active");
       syncLog("PZ DAILY ARCHIVE + CLEAR COMPLETE",{
-        archiveDate:archiveDate,reason:reason||"scheduled-9:01pm",
+        archiveDate:archiveDate,reason:reason||"unspecified",
         members:cloudData.length
       });
       return true;
@@ -4668,7 +4669,7 @@ async function initSupabaseSync(){
     await loadPzCloudHistory();
 
     // Start the actual 15-second rollover engine. The previous version defined
-    // setupAutoEngines() but never invoked it, so the automatic 9:01 PM archive
+    // setupAutoEngines() but never invoked it, so the automatic day rollover
     // could never fire.
     if (!window.__pzAutoEnginesStarted) {
       window.__pzAutoEnginesStarted = true;
