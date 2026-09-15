@@ -1495,7 +1495,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     name: item.name,
     role: item.role,
     checkedIn: false,
-    ac: 0, pz: 0, services: 0, biz: 0, acc: 0,
+    ac: 0, upgrade: 0, services: 0, biz: 0, acc: 0,
     step: '', notes: '', updatedAt: Date.now(), rev: 0, revBy: ''
   }));
 
@@ -2406,7 +2406,6 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   function normalizePZMember(m) {
     if (!m) return m;
     m.ac = Number(m.ac || 0);
-    m.pz = Number(m.pz || 0);
     m.upgrade = Number(m.upgrade || 0);
     m.services = Number(m.services || 0);
     m.biz = Number(m.biz || 0);
@@ -2509,7 +2508,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       data.forEach(d => {
         d.checkedIn = false;
         d.ac = 0;
-        d.pz = 0;
+        d.upgrade = 0;
         d.services = 0;
         d.biz = 0;
         d.acc = 0;
@@ -4228,10 +4227,18 @@ let supabaseClient=null, supabaseReady=false, cloudChannel=null, cloudQueue=Prom
 const pendingStepByMember = new Map();
 const pendingNotesByMember = new Map();
 
+// COLUMN/FIELD NAME MISMATCH — INTENTIONAL, DO NOT "TIDY":
+// The Supabase column is named `pz` for historical reasons (this table was
+// cloned from the GB tracker, where the metric really was PZ Conversion).
+// This app renamed that metric to Upgrades, so the local field is `upgrade`.
+// `upgrade` is the ONLY local source of truth; there is deliberately no local
+// `pz` field. Keeping one meant every write path had to remember to patch the
+// alias, and the ones that forgot silently pushed a stale Upgrades count.
+// The name is translated here and in pzFromCloud() and nowhere else.
 function pzCloudRow(m, patch={}) {
   return Object.assign({
     id:String(m.id), name:String(m.name||""), role:String(m.role||"Specialist"),
-    checked_in:!!m.checkedIn, ac:Number(m.ac||0), pz:Number(m.pz||m.upgrade||0), services:Number(m.services||0),
+    checked_in:!!m.checkedIn, ac:Number(m.ac||0), pz:Number(m.upgrade||0), services:Number(m.services||0),
     biz:Number(m.biz||0), acc:Number(m.acc||0), step:String(m.step||""),
     notes:String(m.notes||""), revision:Math.max(Date.now(),Number(m.rev||0)+1),
     updated_at:new Date().toISOString(), updated_by:CLIENT_ID, removed:false,
@@ -4240,7 +4247,7 @@ function pzCloudRow(m, patch={}) {
 }
 function pzFromCloud(r){
   return {id:String(r.id),name:r.name||"",role:r.role||"Specialist",checkedIn:!!r.checked_in,
-    ac:Number(r.ac||0),pz:Number(r.pz||0),upgrade:Number(r.pz||0),services:Number(r.services||0),biz:Number(r.biz||0),
+    ac:Number(r.ac||0),upgrade:Number(r.pz||0),services:Number(r.services||0),biz:Number(r.biz||0),
     acc:Number(r.acc||0),step:r.step||"",notes:r.notes||"",rev:Number(r.revision||0),
     revBy:r.updated_by||"",updatedAt:r.updated_at?new Date(r.updated_at).getTime():Date.now()};
 }
