@@ -3160,7 +3160,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
         return {
           date:String(r.history_date),
           timestamp:new Date(r.updated_at||r.created_at||Date.now()).getTime(),
-          data:Array.isArray(snap)?snap.map(pzFromCloud):[]
+          data:Array.isArray(snap)?snap.map(pzHistoryMember).filter(Boolean):[]
         };
       });
 
@@ -4250,6 +4250,29 @@ function pzFromCloud(r){
     ac:Number(r.ac||0),upgrade:Number(r.pz||0),services:Number(r.services||0),biz:Number(r.biz||0),
     acc:Number(r.acc||0),step:r.step||"",notes:r.notes||"",rev:Number(r.revision||0),
     revBy:r.updated_by||"",updatedAt:r.updated_at?new Date(r.updated_at).getTime():Date.now()};
+}
+// Archived history snapshots are written by archiveAndClearPzDay() in LOCAL
+// member shape -- they were already mapped through pzFromCloud() before being
+// saved. Feeding them back through pzFromCloud() on load reads cloud COLUMN
+// names that a local member does not have (checked_in, pz), so every archived
+// day came back with checkedIn=false and upgrade=0: Prior Day looked wiped and
+// Weekly/Monthly counted zero shifts and zero Grand Slams. The stored rows were
+// always fine; only this read path corrupted them.
+// Accept either shape so older raw-cloud snapshots still load correctly.
+function pzHistoryMember(r){
+  if(!r || typeof r!=="object") return null;
+  const looksLikeCloudRow = ("checked_in" in r) || ("shift_date" in r) ||
+                            (("pz" in r) && !("upgrade" in r));
+  if(looksLikeCloudRow) return pzFromCloud(r);
+  return {
+    id:String(r.id!=null?r.id:""), name:r.name||"", role:r.role||"Specialist",
+    checkedIn:!!r.checkedIn,
+    ac:Number(r.ac||0), upgrade:Number(r.upgrade||0), services:Number(r.services||0),
+    biz:Number(r.biz||0), acc:Number(r.acc||0),
+    step:r.step||"", notes:r.notes||"",
+    rev:Number(r.rev||0), revBy:r.revBy||"",
+    updatedAt:Number(r.updatedAt||0)||0
+  };
 }
 function pzUnique(list){
   const map=new Map();
