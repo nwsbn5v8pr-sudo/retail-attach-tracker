@@ -1262,11 +1262,18 @@ window.pzEnforcePassword = pzEnforcePassword;
   }
 
   function show() {
+    // Only clear the entered PIN when the gate is actually OPENING. The
+    // session-enforcement interval, visibilitychange, focus and pageshow all
+    // call show() repeatedly while the gate is already up; resetting `pin`
+    // there wiped digits out from under the user mid-entry.
+    const wasHidden = gate.classList.contains("pz-gate-hidden");
     gate.classList.remove("pz-gate-hidden");
     document.body.style.overflow = "hidden";
-    pin = "";
-    showError("");
-    updateDots();
+    if (wasHidden) {
+      pin = "";
+      showError("");
+      updateDots();
+    }
   }
 
   function hide() {
