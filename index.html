@@ -1752,12 +1752,30 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       .sort((a, b) => parseDateSafe(b.date) - parseDateSafe(a.date))[0] || null;
   }
 
-  function getWeekNumber(date) {
+  // ISO-8601 week parts. A week belongs to whichever year contains its
+  // THURSDAY, so late-December days can fall in week 1 of the next year and
+  // early-January days in week 52/53 of the previous one. The week number and
+  // the week year must therefore both come from that same Thursday: pairing an
+  // ISO week number with a plain calendar year splits the week that straddles
+  // New Year into two buckets, each holding part of the same week's totals.
+  function getIsoWeekParts(date) {
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
     const dayNum = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
-    return Math.ceil((((d - yearStart) / 86400000) + 1)/7);
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);            // the Thursday of this week
+    const weekYear = d.getUTCFullYear();
+    const yearStart = new Date(Date.UTC(weekYear, 0, 1));
+    return { year: weekYear, week: Math.ceil((((d - yearStart) / 86400000) + 1)/7) };
+  }
+
+  function getWeekNumber(date) {
+    return getIsoWeekParts(date).week;
+  }
+
+  // Stable identifier for one ISO week, e.g. "2026-W53". Always build week
+  // keys with this so every site agrees on which week a date belongs to.
+  function getWeekKey(date) {
+    const parts = getIsoWeekParts(date);
+    return `${parts.year}-W${parts.week}`;
   }
 
   function getQuarterString(date) {
@@ -2101,17 +2119,10 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
 
     if (currentTab === 'weekly') {
       if (selectedPeriodKey === 'current') {
-        const curWeek = getWeekNumber(now);
-        const curYear = now.getFullYear();
-        relevantRecords = historyRecords.filter(r => {
-          const rd = parseDateSafe(r.date);
-          return getWeekNumber(rd) === curWeek && rd.getFullYear() === curYear;
-        });
+        const curKey = getWeekKey(now);
+        relevantRecords = historyRecords.filter(r => getWeekKey(parseDateSafe(r.date)) === curKey);
       } else {
-        relevantRecords = historyRecords.filter(r => {
-          const rd = parseDateSafe(r.date);
-          return `${rd.getFullYear()}-W${getWeekNumber(rd)}` === selectedPeriodKey;
-        });
+        relevantRecords = historyRecords.filter(r => getWeekKey(parseDateSafe(r.date)) === selectedPeriodKey);
       }
     } else if (currentTab === 'monthly') {
       if (selectedPeriodKey === 'current') {
@@ -3045,18 +3056,17 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     const now = new Date();
 
     if (tab === 'weekly') {
-      const curWeek = getWeekNumber(now);
-      sel.innerHTML += `<option value="current">📅 This Week (Week ${curWeek}, ${now.getFullYear()})</option>`;
+      const curParts = getIsoWeekParts(now);
+      sel.innerHTML += `<option value="current">📅 This Week (Week ${curParts.week}, ${curParts.year})</option>`;
       
       const weekSet = new Set();
       historyRecords.forEach(r => {
-        const d = parseDateSafe(r.date);
-        weekSet.add(`${d.getFullYear()}-W${getWeekNumber(d)}`);
+        weekSet.add(getWeekKey(parseDateSafe(r.date)));
       });
       // The "current" option above already covers this period. Listing it
       // again offered the same period twice with different totals, because
       // only the "current" branch folds in today's live board.
-      weekSet.delete(`${now.getFullYear()}-W${curWeek}`);
+      weekSet.delete(getWeekKey(now));
       weekSet.forEach(w => {
         sel.innerHTML += `<option value="${w}">📊 Week ${w.split('-W')[1]} (${w.split('-W')[0]})</option>`;
       });
