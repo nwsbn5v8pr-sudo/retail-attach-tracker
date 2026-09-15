@@ -3053,6 +3053,10 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
         const d = parseDateSafe(r.date);
         weekSet.add(`${d.getFullYear()}-W${getWeekNumber(d)}`);
       });
+      // The "current" option above already covers this period. Listing it
+      // again offered the same period twice with different totals, because
+      // only the "current" branch folds in today's live board.
+      weekSet.delete(`${now.getFullYear()}-W${curWeek}`);
       weekSet.forEach(w => {
         sel.innerHTML += `<option value="${w}">📊 Week ${w.split('-W')[1]} (${w.split('-W')[0]})</option>`;
       });
@@ -3065,6 +3069,10 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         monthSet.add(key);
       });
+      // The "current" option above already covers this period. Listing it
+      // again offered the same period twice with different totals, because
+      // only the "current" branch folds in today's live board.
+      monthSet.delete(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
       monthSet.forEach(m => {
         const [y, mon] = m.split('-');
         const dateObj = new Date(parseInt(y), parseInt(mon) - 1, 1);
@@ -3077,6 +3085,10 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       historyRecords.forEach(r => {
         qSet.add(getQuarterString(parseDateSafe(r.date)));
       });
+      // The "current" option above already covers this period. Listing it
+      // again offered the same period twice with different totals, because
+      // only the "current" branch folds in today's live board.
+      qSet.delete(getQuarterString(now));
       qSet.forEach(q => {
         sel.innerHTML += `<option value="${q}">📈 ${q}</option>`;
       });
