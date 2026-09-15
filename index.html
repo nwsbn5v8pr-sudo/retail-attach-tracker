@@ -1750,14 +1750,21 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   // archive it" engine performs the rollover with no clock check of its own.
   // Pacific is resolved through the IANA zone, so this tracks PST and PDT
   // rather than drifting an hour for the months the region is on summer time.
-  const ROLLOVER_TIME_ZONE = 'America/Los_Angeles';
-  const ROLLOVER_HOUR = 22;
+  // Deliberately a hoisted function declaration rather than a pair of consts:
+  // getTodayString() is called during script evaluation, ABOVE this point in
+  // the file, and a const would still be in its temporal dead zone and throw --
+  // which aborts the rest of the script and leaves the whole app dead on load.
+  // A function declaration is hoisted complete, so call order cannot matter.
+  // Change the store's day boundary here; nothing else reads these values.
+  function rolloverConfig() {
+    return { timeZone: 'America/Los_Angeles', hour: 22 };
+  }
 
   // Calendar date and hour as they read on the Pacific clock at instant `d`.
   function zonedParts(d) {
     try {
       const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: ROLLOVER_TIME_ZONE,
+        timeZone: rolloverConfig().timeZone,
         year: 'numeric', month: '2-digit', day: '2-digit',
         hour: '2-digit', hourCycle: 'h23'
       }).formatToParts(d).reduce(function (acc, part) {
@@ -1787,7 +1794,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
 
   function getTodayString() {
     const parts = zonedParts(new Date());
-    return parts.hour >= ROLLOVER_HOUR ? shiftDateString(parts.date, 1) : parts.date;
+    return parts.hour >= rolloverConfig().hour ? shiftDateString(parts.date, 1) : parts.date;
   }
 
   function parseDateSafe(dateStr) {
@@ -3071,8 +3078,8 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       filterPanel.style.display = 'none';
       if (btnUndo) btnUndo.style.display = 'none';
       if (btnArchive) btnArchive.style.display = 'none';
-      btnClearCheckins.style.display = 'none';
-      btnReset.style.display = 'none';
+      if (btnClearCheckins) btnClearCheckins.style.display = 'none';
+      if (btnReset) btnReset.style.display = 'none';
       if (btnAddMember) btnAddMember.style.display = 'none';
       renderHistoryList();
       return;
@@ -3085,16 +3092,16 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     if (tab === 'daily') {
       if (periodSelector) periodSelector.style.display = 'none';
       if (btnUndo) btnUndo.style.display = 'inline-flex';
-      btnClearCheckins.style.display = 'inline-flex';
-      btnReset.style.display = 'inline-flex';
+      if (btnClearCheckins) btnClearCheckins.style.display = 'inline-flex';
+      if (btnReset) btnReset.style.display = 'inline-flex';
       if (btnAddMember) btnAddMember.style.display = 'inline-flex';
       document.getElementById('th-notes').textContent = 'Notes / Focus';
       document.getElementById('tot-notes').textContent = '-';
     } else if (tab === 'priorday') {
       if (periodSelector) periodSelector.style.display = 'none';
       if (btnUndo) btnUndo.style.display = 'none';
-      btnClearCheckins.style.display = 'none';
-      btnReset.style.display = 'none';
+      if (btnClearCheckins) btnClearCheckins.style.display = 'none';
+      if (btnReset) btnReset.style.display = 'none';
       if (btnAddMember) btnAddMember.style.display = 'none';
       document.getElementById('th-notes').textContent = 'Notes / Focus';
       const newestArchive = getNewestPriorArchive();
@@ -3102,8 +3109,8 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     } else {
       if (periodSelector) periodSelector.style.display = 'inline-block';
       if (btnUndo) btnUndo.style.display = 'none';
-      btnClearCheckins.style.display = 'none';
-      btnReset.style.display = 'none';
+      if (btnClearCheckins) btnClearCheckins.style.display = 'none';
+      if (btnReset) btnReset.style.display = 'none';
       if (btnAddMember) btnAddMember.style.display = 'none';
       document.getElementById('th-notes').textContent = 'Performance Pace';
       document.getElementById('tot-notes').textContent = 'Store Summary';
