@@ -1723,6 +1723,26 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       .replace(/"/g, '&quot;');
   }
 
+  // Interpolate a value into a single-quoted JS string that lives inside a
+  // double-quoted HTML attribute, e.g. onclick="fn('<value>')". Two layers
+  // have to survive: the JS string literal (backslash, apostrophe and the
+  // characters JS treats as line terminators) and then the attribute itself
+  // (&, <, > and the double quote that would close it).
+  // JS escaping must happen FIRST -- the browser decodes HTML entities before
+  // the handler is compiled, so escaping the other way round would let a
+  // decoded apostrophe close the string and change the call.
+  function jsAttr(value) {
+    return escapeHtml(
+      String(value == null ? '' : value)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/\r/g, '\\r')
+        .replace(/\n/g, '\\n')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029')
+    );
+  }
+
   function getTodayString() {
     const d = new Date();
     const year = d.getFullYear();
@@ -2297,7 +2317,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     if (isLive) {
       tr.innerHTML = `
         <td class="col-sticky">
-          <div class="name-cell-wrap" onclick="toggleCheckIn('${p.id}')">
+          <div class="name-cell-wrap" onclick="toggleCheckIn('${jsAttr(p.id)}')">
             <span class="chk-badge" id="chk-badge-${p.id}">${p.checkedIn ? '✅' : '◻️'}</span>
             <div class="name-cell">
               <span class="member-name" id="name-${p.id}">${escapeHtml((p.displayName || displayMemberName(p.name)))}</span>
@@ -2308,41 +2328,41 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
         <td style="text-align:center;" id="val-slam-${p.id}"></td>
         <td style="text-align:center;">
           <div class="counter-box">
-            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'ac', -1)">−</button>
+            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts('${jsAttr(p.id)}',  'ac', -1)">−</button>
             <span class="cnt-val" id="val-ac-${p.id}">${p.ac}</span>
-            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'ac', 1)">+</button>
+            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts('${jsAttr(p.id)}',  'ac', 1)">+</button>
           </div>
         </td>
         <td style="text-align:center;">
           <div class="counter-box">
-            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'upgrade', -1)">−</button>
+            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts('${jsAttr(p.id)}',  'upgrade', -1)">−</button>
             <span class="cnt-val" id="val-up-${p.id}">${p.upgrade}</span>
-            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'upgrade', 1)">+</button>
+            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts('${jsAttr(p.id)}',  'upgrade', 1)">+</button>
           </div>
         </td>
         <td style="text-align:center;">
           <div class="counter-box">
-            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'services', -1)">−</button>
+            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts('${jsAttr(p.id)}',  'services', -1)">−</button>
             <span class="cnt-val" id="val-srv-${p.id}">${p.services}</span>
-            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'services', 1)">+</button>
+            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts('${jsAttr(p.id)}',  'services', 1)">+</button>
           </div>
         </td>
         <td style="text-align:center;">
           <div class="counter-box">
-            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'biz', -1)">−</button>
+            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts('${jsAttr(p.id)}',  'biz', -1)">−</button>
             <span class="cnt-val" id="val-biz-${p.id}">${p.biz}</span>
-            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'biz', 1)">+</button>
+            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts('${jsAttr(p.id)}',  'biz', 1)">+</button>
           </div>
         </td>
         <td style="text-align:center;">
           <div class="counter-box">
-            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'acc', -1)">−</button>
+            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts('${jsAttr(p.id)}',  'acc', -1)">−</button>
             <span class="cnt-val" id="val-acc-${p.id}">${p.acc}</span>
-            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts('${p.id}',  'acc', 1)">+</button>
+            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts('${jsAttr(p.id)}',  'acc', 1)">+</button>
           </div>
         </td>
         <td style="text-align:center;">
-          <select class="step-select" id="step-${p.id}" onchange="saveStep('${p.id}', this.value)">
+          <select class="step-select" id="step-${p.id}" onchange="saveStep('${jsAttr(p.id)}', this.value)">
             <option value="">- None -</option>
             <option value="Approach" ${p.step === 'Approach' ? 'selected' : ''}>Approach</option>
             <option value="Probe" ${p.step === 'Probe' ? 'selected' : ''}>Probe</option>
@@ -2352,7 +2372,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
           </select>
         </td>
         <td>
-          <textarea class="notes-input" id="notes-${p.id}" type="text" placeholder="Add note / focus..." value="${escapeHtml(p.notes || '')}" onclick="event.stopPropagation()" oninput="saveNote('${p.id}', this.value)" rows="1"></textarea>
+          <textarea class="notes-input" id="notes-${p.id}" type="text" placeholder="Add note / focus..." value="${escapeHtml(p.notes || '')}" onclick="event.stopPropagation()" oninput="saveNote('${jsAttr(p.id)}', this.value)" rows="1"></textarea>
         </td>
       `;
     } else if (isPrior) {
@@ -3453,7 +3473,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
           <div class="history-meta">👥 ${recChecked} Checked In • 🏆 ${recSlam} Grand Slams • 🍎 ${recAc} AC+ • 🆙 ${recUp} Upgrades • 🛍️ ${recSrv} Services • 💼 ${recBiz} Biz • 🎧 ${recAcc} Acc</div>
         </div>
         <div class="history-actions">
-          <button class="secondary" style="min-height: 32px; padding: 4px 10px; font-size: 12px;" onclick="viewHistoryInPriorTab('${rec.date}')">👁️ View Full Day</button>
+          <button class="secondary" style="min-height: 32px; padding: 4px 10px; font-size: 12px;" onclick="viewHistoryInPriorTab('${jsAttr(rec.date)}')">👁️ View Full Day</button>
           <button class="secondary" style="min-height: 32px; padding: 4px 10px; font-size: 12px;" onclick="exportHistoryCSV(${idx})">📥 Export Day CSV</button>
           <button class="secondary" style="min-height: 32px; padding: 4px 10px; font-size: 12px;" onclick="restoreHistoryToLive(${idx})">🔄 Restore to Live</button>
           <button class="danger" style="min-height: 32px; padding: 4px 8px; font-size: 12px;" onclick="deleteHistoryRecord(${idx})">🗑️</button>
