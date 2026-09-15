@@ -3208,7 +3208,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
         return {
           date:String(r.history_date),
           timestamp:new Date(r.updated_at||r.created_at||Date.now()).getTime(),
-          data:Array.isArray(snap)?snap.map(pzHistoryMember).filter(Boolean):[]
+          data:pzSnapshotParts(snap).members.map(pzHistoryMember).filter(Boolean)
         };
       });
 
@@ -3271,6 +3271,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       // SECOND SAFETY GATE: if this date already has a real archived snapshot,
       // never replace it with an empty snapshot from a device waking after rollover.
       let existingHistory = null;
+      let existingParts = { members: [], sessions: [], lastResetTs: 0 };
       try {
         const existingRows = await pzRestRequest(
           PZ_HISTORY_TABLE + "?select=history_date,snapshot&history_date=eq." +
@@ -3281,7 +3282,8 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
           if (typeof snap === "string") {
             try { snap = JSON.parse(snap); } catch(e) { snap = []; }
           }
-          existingHistory = Array.isArray(snap) ? snap : [];
+          existingParts = pzSnapshotParts(snap);
+          existingHistory = existingParts.members;
         }
       } catch (historyReadErr) {
         if (!hasCloudActivity) {
@@ -3299,9 +3301,39 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
         return false;
       }
 
+      // One timestamp stamps the post-archive reset AND marks, inside the
+      // snapshot, the point past which any later work is a NEW session.
+      // Distinct from the syncNow() resetTs used further down for the MQTT
+      // broadcast: this one is the Supabase row revision.
+      const archiveResetTs = Date.now();
+      const sessionId = pzSessionId(cloudData);
+      const incomingMaxRev = (cloudData||[]).reduce(
+        function(mx,m){ return Math.max(mx, Number(m.rev||0)); }, 0);
+
+      // Merging is only safe if it cannot double-count. A shift is already in
+      // this date's snapshot when either its exact board state was folded in
+      // before (two iPads archiving the same rollover derive the same id), or
+      // all of its edits predate the reset that closed an earlier archive.
+      const alreadyCounted =
+        existingParts.sessions.indexOf(sessionId) >= 0 ||
+        (existingParts.lastResetTs > 0 && incomingMaxRev <= existingParts.lastResetTs);
+
+      const mergedMembers = alreadyCounted
+        ? existingParts.members
+        : pzMergeArchivedMembers(existingParts.members, cloudData);
+      const mergedSessions = alreadyCounted
+        ? existingParts.sessions
+        : existingParts.sessions.concat([sessionId]);
+
+      if (alreadyCounted) {
+        syncLog("PZ ARCHIVE ALREADY COUNTED — MERGING SKIPPED", {
+          archiveDate: archiveDate, sessionId: sessionId
+        });
+      }
+
       const historyPayload={
         history_date:archiveDate,
-        snapshot:cloudData,
+        snapshot:{ v:2, sessions:mergedSessions, lastResetTs:archiveResetTs, members:mergedMembers },
         updated_at:new Date().toISOString()
       };
 
@@ -3319,7 +3351,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
         {method:"PATCH",
          body:JSON.stringify({
            checked_in:false,ac:0,pz:0,services:0,biz:0,acc:0,step:"",notes:"",
-           revision:Date.now(),updated_at:new Date().toISOString(),
+           revision:archiveResetTs,updated_at:new Date().toISOString(),
            updated_by:CLIENT_ID,shift_date:getTodayString()
          })},key
       );
@@ -3327,7 +3359,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       const snapshot={
         date:archiveDate,
         timestamp:Date.now(),
-        data:JSON.parse(JSON.stringify(cloudData))
+        data:JSON.parse(JSON.stringify(mergedMembers))
       };
       const idx=historyRecords.findIndex(r=>String(r.date)===archiveDate);
       if(idx>=0) historyRecords[idx]=snapshot;
@@ -4322,6 +4354,74 @@ function pzHistoryMember(r){
     updatedAt:Number(r.updatedAt||0)||0
   };
 }
+// ---- Archived-day snapshots ------------------------------------------------
+// A stored snapshot used to be a bare array of members, so a second archive for
+// the same date REPLACED the first and the earlier shift was lost. Snapshots now
+// also carry which sessions have already been folded in, so repeat archives
+// accumulate -- and, just as importantly, so a session that has already been
+// counted is never counted a second time. Legacy bare arrays still read fine.
+function pzSnapshotParts(snap){
+  if(Array.isArray(snap)) return {members:snap, sessions:[], lastResetTs:0};
+  if(snap && typeof snap==="object" && Array.isArray(snap.members)){
+    return {
+      members:snap.members,
+      sessions:Array.isArray(snap.sessions)?snap.sessions.map(String):[],
+      lastResetTs:Number(snap.lastResetTs||0)
+    };
+  }
+  return {members:[], sessions:[], lastResetTs:0};
+}
+
+// Identifies a board STATE rather than the device reading it, so two iPads
+// archiving the same shift derive the same id and it is folded in only once.
+function pzSessionId(members){
+  const rows=(members||[]).map(function(m){
+    return [String(m.id||""), m.checkedIn?1:0, Number(m.ac||0), Number(m.upgrade||0),
+            Number(m.services||0), Number(m.biz||0), Number(m.acc||0),
+            String(m.step||""), String(m.notes||""), Number(m.rev||0)].join("|");
+  }).sort().join(";");
+  let h=0;
+  for(let i=0;i<rows.length;i++) h=((h<<5)-h+rows.charCodeAt(i))|0;
+  return String(h)+":"+rows.length;
+}
+
+// Fold a newly archived shift into whatever that date already holds. Counters
+// accumulate across the day's sessions, check-in is sticky once earned, the
+// latest non-empty Apple Step wins, and distinct notes are kept side by side.
+function pzMergeArchivedMembers(previous, incoming){
+  const keyOf=function(m){ return String((m&&m.name)||"").trim().toLowerCase(); };
+  const byName=new Map();
+  (previous||[]).forEach(function(raw){
+    const m=pzHistoryMember(raw);
+    if(m && keyOf(m)) byName.set(keyOf(m), m);
+  });
+  (incoming||[]).forEach(function(raw){
+    const m=pzHistoryMember(raw);
+    if(!m || !keyOf(m)) return;
+    const k=keyOf(m), prev=byName.get(k);
+    if(!prev){ byName.set(k,m); return; }
+    const notes=[prev.notes,m.notes]
+      .map(function(n){ return String(n||"").trim(); })
+      .filter(Boolean)
+      .filter(function(n,i,a){ return a.indexOf(n)===i; });
+    byName.set(k,{
+      id:m.id||prev.id, name:m.name||prev.name, role:m.role||prev.role,
+      checkedIn:!!(prev.checkedIn||m.checkedIn),
+      ac:Number(prev.ac||0)+Number(m.ac||0),
+      upgrade:Number(prev.upgrade||0)+Number(m.upgrade||0),
+      services:Number(prev.services||0)+Number(m.services||0),
+      biz:Number(prev.biz||0)+Number(m.biz||0),
+      acc:Number(prev.acc||0)+Number(m.acc||0),
+      step:String(m.step||"")||String(prev.step||""),
+      notes:notes.join(" | "),
+      rev:Math.max(Number(prev.rev||0),Number(m.rev||0)),
+      revBy:m.revBy||prev.revBy,
+      updatedAt:Math.max(Number(prev.updatedAt||0),Number(m.updatedAt||0))
+    });
+  });
+  return Array.from(byName.values());
+}
+
 function pzUnique(list){
   const map=new Map();
   (list||[]).forEach(m=>{
