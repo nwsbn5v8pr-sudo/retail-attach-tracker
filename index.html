@@ -1744,12 +1744,9 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   }
 
   // ---- Business day ---------------------------------------------------------
-  // The tracker's day boundary is 22:00 Pacific, not local midnight. Anything
-  // logged after 22:00 Pacific belongs to the NEXT business day, so the live
-  // board's day changes at 10 PM and the existing "board's day != today, so
-  // archive it" engine performs the rollover with no clock check of its own.
-  // Pacific is resolved through the IANA zone, so this tracks PST and PDT
-  // rather than drifting an hour for the months the region is on summer time.
+  // The tracker's day boundary is 11:59 PM Pacific. The live board rolls
+  // into the next business day at that boundary, using the IANA Pacific zone
+  // so the clock follows PST/PDT without drifting seasonally.
   // Deliberately a hoisted function declaration rather than a pair of consts:
   // getTodayString() is called during script evaluation, ABOVE this point in
   // the file, and a const would still be in its temporal dead zone and throw --
@@ -1757,7 +1754,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   // A function declaration is hoisted complete, so call order cannot matter.
   // Change the store's day boundary here; nothing else reads these values.
   function rolloverConfig() {
-    return { timeZone: 'America/Los_Angeles', hour: 22 };
+    return { timeZone: 'America/Los_Angeles', hour: 23, minute: 59 };
   }
 
   // Calendar date and hour as they read on the Pacific clock at instant `d`.
@@ -1766,20 +1763,22 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       const parts = new Intl.DateTimeFormat('en-CA', {
         timeZone: rolloverConfig().timeZone,
         year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', hourCycle: 'h23'
+        hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
       }).formatToParts(d).reduce(function (acc, part) {
         acc[part.type] = part.value; return acc;
       }, {});
       const hour = Number(parts.hour);
-      if (parts.year && parts.month && parts.day && hour >= 0 && hour <= 23) {
-        return { date: `${parts.year}-${parts.month}-${parts.day}`, hour: hour };
+      const minute = Number(parts.minute);
+      if (parts.year && parts.month && parts.day && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+        return { date: `${parts.year}-${parts.month}-${parts.day}`, hour: hour, minute: minute };
       }
     } catch (e) {}
     // Intl or the zone is unavailable: fall back to this device's own clock so
     // the tracker still rolls over once a day, just on local time.
     return {
       date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
-      hour: d.getHours()
+      hour: d.getHours(),
+      minute: d.getMinutes()
     };
   }
 
@@ -1794,7 +1793,10 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
 
   function getTodayString() {
     const parts = zonedParts(new Date());
-    return parts.hour >= rolloverConfig().hour ? shiftDateString(parts.date, 1) : parts.date;
+    const boundary = rolloverConfig();
+    const pastBoundary = parts.hour > boundary.hour ||
+      (parts.hour === boundary.hour && parts.minute >= boundary.minute);
+    return pastBoundary ? shiftDateString(parts.date, 1) : parts.date;
   }
 
   function parseDateSafe(dateStr) {
@@ -2501,6 +2503,19 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     return m;
   }
 
+  let uncheckedMembersCollapsed = true;
+
+  function toggleUncheckedMembers() {
+    uncheckedMembersCollapsed = !uncheckedMembersCollapsed;
+    const header = document.getElementById('header-not-checked-in');
+    if (header) {
+      const cell = header.querySelector('td');
+      const count = data.filter(d => !d.checkedIn).length;
+      if (cell) cell.innerHTML = `${uncheckedMembersCollapsed ? '▸' : '▾'} ⚪ Other Team Members (${count}) — ${uncheckedMembersCollapsed ? 'Show' : 'Hide'}`;
+    }
+    filterTable();
+  }
+
   function renderTableStructure() {
     data = data.map(normalizePZMember);
     const seenRenderIds = new Set();
@@ -2665,7 +2680,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
         const divOut = document.createElement('tr');
         divOut.className = 'section-divider-row';
         divOut.id = 'header-not-checked-in';
-        divOut.innerHTML = `<td colspan="9" class="col-sticky">⚪ Other Team Members (${uncheckedMembers.length})</td>`;
+        divOut.innerHTML = `<td colspan="9" class="col-sticky" onclick="toggleUncheckedMembers()" style="cursor:pointer; user-select:none;">${uncheckedMembersCollapsed ? '▸' : '▾'} ⚪ Other Team Members (${uncheckedMembers.length}) — ${uncheckedMembersCollapsed ? 'Show' : 'Hide'}</td>`;
         tbody.appendChild(divOut);
 
         uncheckedMembers.forEach(d => {
@@ -2871,9 +2886,10 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       if (slamFilter === "SLAM") matchSlam = (currentTab === 'daily' || currentTab === 'priorday') ? hits === 5 : p.slamsAchieved > 0;
       if (slamFilter === "NEAR") matchSlam = (currentTab === 'daily' || currentTab === 'priorday') ? hits === 4 : false;
 
+      const hiddenByCollapse = currentTab === 'daily' && uncheckedMembersCollapsed && !isChecked;
       const rowEl = document.getElementById(`row-${p.id}`);
       if (rowEl) {
-        if (matchName && matchRole && matchCheckin && matchStep && matchSlam) {
+        if (matchName && matchRole && matchCheckin && matchStep && matchSlam && !hiddenByCollapse) {
           rowEl.style.display = "";
           visibleCount++;
         } else {
@@ -3236,13 +3252,11 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   /* ⏰ DAY-ROLLOVER ENGINE — fires on the calendar date changing, not on a clock time */
 
   // 📅 Robust day-rollover: archives `data` to the date it actually belongs
-  // to and clears the board for a new day. There is no configured rollover
-  // time and nothing in this file reads the clock — it simply compares
-  // "what day is the live board currently tracking?" vs. "what day is it
-  // right now?" every time this runs (on load, and every 15s tick), so in
-  // practice it fires just after the device's own local midnight. If the
+  // to and clears the board for a new day. The business-day date is derived
+  // from the Pacific 11:59 PM boundary. The engine compares the tracked date
+  // with the current business-day date on load and every 15 seconds. If the
   // iPad was asleep, the tab was closed, or the passcode gate was up at
-  // midnight, the very next time the app is opened it catches up correctly:
+  // rollover, the very next time the app is opened it catches up correctly:
   // saves the stale day to Prior Day / History (which also feeds Weekly,
   // Monthly, Quarterly), then resets the live board for today.
   async function loadPzCloudHistory(){
