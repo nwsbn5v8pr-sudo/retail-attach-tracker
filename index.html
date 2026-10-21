@@ -1102,6 +1102,10 @@ window.pzEnforcePassword = pzEnforcePassword;
       <span class="kpi-num" id="kpi-grandslam" style="color: #ff9500;">0</span>
     </div>
     <div class="kpi-card">
+      <span class="kpi-label">🤳 Demo</span>
+      <span class="kpi-num" id="kpi-demo">0</span>
+    </div>
+    <div class="kpi-card">
       <span class="kpi-label">🍎 AppleCare+</span>
       <span class="kpi-num" id="kpi-ac">0</span>
     </div>
@@ -1173,6 +1177,9 @@ window.pzEnforcePassword = pzEnforcePassword;
             <th style="text-align:center;" id="th-slam" onclick="setColumnSort('slam')">
               🏆 Status <span class="sort-icon" id="sort-icon-slam">↕️</span>
             </th>
+            <th style="text-align:center;" id="th-demo" onclick="setColumnSort('demo')">
+              🤳 Demo <span class="sort-icon" id="sort-icon-demo">↕️</span>
+            </th>
             <th style="text-align:center;" id="th-ac" onclick="setColumnSort('ac')">
               🍎 AppleCare+ <span class="sort-icon" id="sort-icon-ac">↕️</span>
             </th>
@@ -1199,6 +1206,7 @@ window.pzEnforcePassword = pzEnforcePassword;
           <tr>
             <td class="col-sticky" id="tot-name">TOTAL STORE SCORE</td>
             <td style="text-align:center;" id="tot-slam">0 / 81</td>
+            <td style="text-align:center;" id="tot-demo">0</td>
             <td style="text-align:center;" id="tot-ac">0</td>
             <td style="text-align:center;" id="tot-up">0</td>
             <td style="text-align:center;" id="tot-srv">0</td>
@@ -1477,7 +1485,7 @@ window.pzEnforcePassword = pzEnforcePassword;
   // Does the live board contain any actual activity?
   function hasAnyActivity(list) {
     return (list || []).some(function(d) {
-      return d.checkedIn || ((d.ac||0) + (d.upgrade||0) + (d.services||0) + (d.biz||0) + (d.acc||0)) > 0;
+      return d.checkedIn || ((d.demo||0) + (d.ac||0) + (d.upgrade||0) + (d.services||0) + (d.biz||0) + (d.acc||0)) > 0;
     });
   }
 
@@ -1672,7 +1680,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     try {
       const rows = (obj.data || []).map(function(d) {
         return [d.name, d.rev || 0, d.revBy || "", d.checkedIn ? 1 : 0,
-                d.ac||0, d.upgrade||0, d.services||0, d.biz||0, d.acc||0,
+                d.demo||0, d.ac||0, d.upgrade||0, d.services||0, d.biz||0, d.acc||0,
                 d.step||"", d.notes||""].join("|");
       }).join(";");
       const hist = (obj.history || []).map(function(h) {
@@ -2103,7 +2111,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   }
 
   function updateSortHeaderIcons() {
-    const cols = ['name', 'slam', 'ac', 'upgrade', 'services', 'biz', 'acc', 'step'];
+    const cols = ['name', 'slam', 'demo', 'ac', 'upgrade', 'services', 'biz', 'acc', 'step'];
     cols.forEach(c => {
       const th = document.getElementById(`th-${c}`);
       const icon = document.getElementById(`sort-icon-${c}`);
@@ -2130,7 +2138,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   }
 
   function getTotalUnits(p) {
-    return (p.ac || 0) + (p.upgrade || 0) + (p.services || 0) + (p.biz || 0) + (p.acc || 0);
+    return (p.demo || 0) + (p.ac || 0) + (p.upgrade || 0) + (p.services || 0) + (p.biz || 0) + (p.acc || 0);
   }
 
   function getDisplayList() {
@@ -2232,6 +2240,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
         role: m.role,
         checkedIn: false,
         shiftsWorked: 0,
+        demo: 0,
         ac: 0,
         upgrade: 0,
         services: 0,
@@ -2276,6 +2285,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
               memberMap[p.name].shiftsWorked += 1;
               memberMap[p.name].checkedIn = true;
             }
+            memberMap[p.name].demo += (p.demo || 0);
             memberMap[p.name].ac += (p.ac || 0);
             memberMap[p.name].upgrade += (p.upgrade || 0);
             memberMap[p.name].services += (p.services || 0);
@@ -2384,6 +2394,13 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
         <td style="text-align:center;" id="val-slam-${p.id}"></td>
         <td style="text-align:center;">
           <div class="counter-box">
+            <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts('${jsAttr(p.id)}', 'demo', -1)">−</button>
+            <span class="cnt-val" id="val-demo-${p.id}">${p.demo || 0}</span>
+            <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts('${jsAttr(p.id)}', 'demo', 1)">+</button>
+          </div>
+        </td>
+        <td style="text-align:center;">
+          <div class="counter-box">
             <button type="button" class="cnt-btn minus" onclick="event.stopPropagation(); updateCounts('${jsAttr(p.id)}',  'ac', -1)">−</button>
             <span class="cnt-val" id="val-ac-${p.id}">${p.ac}</span>
             <button type="button" class="cnt-btn plus" onclick="event.stopPropagation(); updateCounts('${jsAttr(p.id)}',  'ac', 1)">+</button>
@@ -2448,6 +2465,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
           </div>
         </td>
         <td style="text-align:center;">${slamBadge}</td>
+        <td style="text-align:center;"><span class="aggregate-val">${p.demo || 0}</span></td>
         <td style="text-align:center;"><span class="aggregate-val">${p.ac}</span></td>
         <td style="text-align:center;"><span class="aggregate-val">${p.upgrade}</span></td>
         <td style="text-align:center;"><span class="aggregate-val">${p.services}</span></td>
@@ -2472,6 +2490,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
           </div>
         </td>
         <td style="text-align:center;">${slamBadge}</td>
+        <td style="text-align:center;"><span class="aggregate-val">${p.demo || 0}</span></td>
         <td style="text-align:center;"><span class="aggregate-val">${p.ac}</span></td>
         <td style="text-align:center;"><span class="aggregate-val">${p.upgrade}</span></td>
         <td style="text-align:center;"><span class="aggregate-val">${p.services}</span></td>
@@ -2492,6 +2511,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
 
   function normalizePZMember(m) {
     if (!m) return m;
+    m.demo = Number(m.demo || 0);
     m.ac = Number(m.ac || 0);
     m.upgrade = Number(m.upgrade || 0);
     m.services = Number(m.services || 0);
@@ -2667,7 +2687,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
         const divIn = document.createElement('tr');
         divIn.className = 'section-divider-row';
         divIn.id = 'header-checked-in';
-        divIn.innerHTML = `<td colspan="9" class="col-sticky">🟢 On Shift / Checked In (${checkedMembers.length})</td>`;
+        divIn.innerHTML = `<td colspan="10" class="col-sticky">🟢 On Shift / Checked In (${checkedMembers.length})</td>`;
         tbody.appendChild(divIn);
 
         checkedMembers.forEach(d => {
@@ -2680,7 +2700,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
         const divOut = document.createElement('tr');
         divOut.className = 'section-divider-row';
         divOut.id = 'header-not-checked-in';
-        divOut.innerHTML = `<td colspan="9" class="col-sticky" onclick="toggleUncheckedMembers()" style="cursor:pointer; user-select:none;">${uncheckedMembersCollapsed ? '▸' : '▾'} ⚪ Other Team Members (${uncheckedMembers.length}) — ${uncheckedMembersCollapsed ? 'Show' : 'Hide'}</td>`;
+        divOut.innerHTML = `<td colspan="10" class="col-sticky" onclick="toggleUncheckedMembers()" style="cursor:pointer; user-select:none;">${uncheckedMembersCollapsed ? '▸' : '▾'} ⚪ Other Team Members (${uncheckedMembers.length}) — ${uncheckedMembersCollapsed ? 'Show' : 'Hide'}</td>`;
         tbody.appendChild(divOut);
 
         uncheckedMembers.forEach(d => {
@@ -2757,6 +2777,8 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     const member = data.find(d => d.id === i);
     if (!member) return;
 
+    const elDemo = document.getElementById(`val-demo-${i}`);
+    if (elDemo) elDemo.textContent = member.demo || 0;
     const elAc = document.getElementById(`val-ac-${i}`);
     if (elAc) elAc.textContent = member.ac;
     const elUp = document.getElementById(`val-up-${i}`);
@@ -2818,7 +2840,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
 
   function updateTotals() {
     const list = getDisplayList();
-    let totAc = 0, totUp = 0, totSrv = 0, totBiz = 0, totAcc = 0, totSlam = 0, totCheckin = 0;
+    let totDemo = 0, totAc = 0, totUp = 0, totSrv = 0, totBiz = 0, totAcc = 0, totSlam = 0, totCheckin = 0;
 
     list.forEach(d => {
       if (currentTab === 'daily') {
@@ -2833,6 +2855,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
         if (d.shiftsWorked > 0) totCheckin += d.shiftsWorked;
         totSlam += (d.slamsAchieved || 0);
       }
+      totDemo += Number(d.demo || 0);
       totAc += d.ac;
       totUp += d.upgrade;
       totSrv += d.services;
@@ -2845,6 +2868,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     document.getElementById("lbl-kpi-checkin").textContent = (isLive || isPrior) ? "👥 Checked In" : "👥 Total Shifts";
     document.getElementById("kpi-checkin").textContent = (isLive || isPrior) ? `${totCheckin} / ${list.length}` : `${totCheckin} Shifts`;
     document.getElementById("kpi-grandslam").textContent = totSlam;
+    document.getElementById("kpi-demo").textContent = totDemo;
     document.getElementById("kpi-ac").textContent = totAc;
     document.getElementById("kpi-upgrade").textContent = totUp;
     document.getElementById("kpi-services").textContent = totSrv;
@@ -2853,6 +2877,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
 
     document.getElementById("tot-name").textContent = isLive ? "TOTAL STORE SCORE" : `${currentTab.toUpperCase()} TOTAL`;
     document.getElementById("tot-slam").textContent = (isLive || isPrior) ? `${totSlam} / ${list.length}` : `${totSlam} Slams`;
+    document.getElementById("tot-demo").textContent = totDemo;
     document.getElementById("tot-ac").textContent = totAc;
     document.getElementById("tot-up").textContent = totUp;
     document.getElementById("tot-srv").textContent = totSrv;
@@ -3415,7 +3440,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
         PZ_MEMBERS_TABLE+"?removed=eq.false",
         {method:"PATCH",
          body:JSON.stringify({
-           checked_in:false,ac:0,pz:0,services:0,biz:0,acc:0,step:"",notes:"",
+           checked_in:false,ac:0,pz:0,services:0,biz:0,acc:0,demo:0,step:"",notes:"",
            revision:archiveResetTs,updated_at:new Date().toISOString(),
            updated_by:CLIENT_ID,shift_date:getTodayString()
          })},key
@@ -3632,7 +3657,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       const hits = getHitCount(p);
       const slamLabel = hits === 5 ? "GRAND SLAM (5/5) 🏆" : `${hits}/5`;
       const inStatus = p.checkedIn ? "Yes" : "No";
-      csv += `"${inStatus}","${p.name}","${p.role}","${slamLabel}",${p.ac},${p.upgrade},${p.services},${p.biz},${p.acc},"${p.step || ''}","${p.notes || ''}"\n`;
+      csv += `"${inStatus}","${p.name}","${p.role}","${slamLabel}",${p.demo || 0},${p.ac},${p.upgrade},${p.services},${p.biz},${p.acc},"${p.step || ''}","${p.notes || ''}"\n`;
     });
     const blob = new Blob([csv], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
@@ -3788,20 +3813,20 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   function exportCSV() {
     let csv = `PZ Focus & Follow Export (${currentTab.toUpperCase()})\n`;
     if (currentTab === 'daily' || currentTab === 'priorday') {
-      csv += "Checked In,Name,Job Title,Grand Slam Status (🏆),AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧),Apple Steps of Services,Notes\n";
+      csv += "Checked In,Name,Job Title,Grand Slam Status (🏆),Demo (🤳),AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧),Apple Steps of Services,Notes\n";
       const list = getDisplayList();
       const exportData = [...list].sort((a, b) => (b.checkedIn ? 1 : 0) - (a.checkedIn ? 1 : 0));
       exportData.forEach(p => {
         const hits = getHitCount(p);
         const slamLabel = hits === 5 ? "GRAND SLAM (5/5) 🏆" : `${hits}/5`;
         const inStatus = p.checkedIn ? "Yes" : "No";
-        csv += `"${inStatus}","${p.name}","${p.role}","${slamLabel}",${p.ac},${p.upgrade},${p.services},${p.biz},${p.acc},"${p.step || ''}","${p.notes || ''}"\n`;
+        csv += `"${inStatus}","${p.name}","${p.role}","${slamLabel}",${p.demo || 0},${p.ac},${p.upgrade},${p.services},${p.biz},${p.acc},"${p.step || ''}","${p.notes || ''}"\n`;
       });
     } else {
       const list = getDisplayList();
-      csv += "Name,Job Title,Shifts Worked,Grand Slam Achieved,AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧)\n";
+      csv += "Name,Job Title,Shifts Worked,Grand Slam Achieved,Demo (🤳),AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧)\n";
       list.forEach(p => {
-        csv += `"${p.name}","${p.role}",${p.shiftsWorked},${p.slamsAchieved},${p.ac},${p.upgrade},${p.services},${p.biz},${p.acc}\n`;
+        csv += `"${p.name}","${p.role}",${p.shiftsWorked},${p.slamsAchieved},${p.demo || 0},${p.ac},${p.upgrade},${p.services},${p.biz},${p.acc}\n`;
       });
     }
 
@@ -4383,7 +4408,7 @@ function pzCloudRow(m, patch={}) {
   return Object.assign({
     id:String(m.id), name:String(m.name||""), role:String(m.role||"Specialist"),
     checked_in:!!m.checkedIn, ac:Number(m.ac||0), pz:Number(m.upgrade||0), services:Number(m.services||0),
-    biz:Number(m.biz||0), acc:Number(m.acc||0), step:String(m.step||""),
+    biz:Number(m.biz||0), acc:Number(m.acc||0), demo:Number(m.demo||0), step:String(m.step||""),
     notes:String(m.notes||""), revision:Math.max(Date.now(),Number(m.rev||0)+1),
     updated_at:new Date().toISOString(), updated_by:CLIENT_ID, removed:false,
     shift_date:getTodayString()
@@ -4392,7 +4417,7 @@ function pzCloudRow(m, patch={}) {
 function pzFromCloud(r){
   return {id:String(r.id),name:r.name||"",role:r.role||"Specialist",checkedIn:!!r.checked_in,
     ac:Number(r.ac||0),upgrade:Number(r.pz||0),services:Number(r.services||0),biz:Number(r.biz||0),
-    acc:Number(r.acc||0),step:r.step||"",notes:r.notes||"",rev:Number(r.revision||0),
+    acc:Number(r.acc||0),demo:Number(r.demo||0),step:r.step||"",notes:r.notes||"",rev:Number(r.revision||0),
     revBy:r.updated_by||"",updatedAt:r.updated_at?new Date(r.updated_at).getTime():Date.now()};
 }
 // Archived history snapshots are written by archiveAndClearPzDay() in LOCAL
@@ -4412,7 +4437,7 @@ function pzHistoryMember(r){
     id:String(r.id!=null?r.id:""), name:r.name||"", role:r.role||"Specialist",
     checkedIn:!!r.checkedIn,
     ac:Number(r.ac||0), upgrade:Number(r.upgrade||0), services:Number(r.services||0),
-    biz:Number(r.biz||0), acc:Number(r.acc||0),
+    biz:Number(r.biz||0), acc:Number(r.acc||0), demo:Number(r.demo||0),
     step:r.step||"", notes:r.notes||"",
     rev:Number(r.rev||0), revBy:r.revBy||"",
     updatedAt:Number(r.updatedAt||0)||0
@@ -4441,7 +4466,7 @@ function pzSnapshotParts(snap){
 function pzSessionId(members){
   const rows=(members||[]).map(function(m){
     return [String(m.id||""), m.checkedIn?1:0, Number(m.ac||0), Number(m.upgrade||0),
-            Number(m.services||0), Number(m.biz||0), Number(m.acc||0),
+            Number(m.services||0), Number(m.biz||0), Number(m.acc||0), Number(m.demo||0),
             String(m.step||""), String(m.notes||""), Number(m.rev||0)].join("|");
   }).sort().join(";");
   let h=0;
@@ -4476,6 +4501,7 @@ function pzMergeArchivedMembers(previous, incoming){
       services:Number(prev.services||0)+Number(m.services||0),
       biz:Number(prev.biz||0)+Number(m.biz||0),
       acc:Number(prev.acc||0)+Number(m.acc||0),
+      demo:Number(prev.demo||0)+Number(m.demo||0),
       step:String(m.step||"")||String(prev.step||""),
       notes:notes.join(" | "),
       rev:Math.max(Number(prev.rev||0),Number(m.rev||0)),
@@ -4638,7 +4664,7 @@ async function supabaseResetDay(){
       PZ_MEMBERS_TABLE+"?removed=eq.false",
       {method:"PATCH",
        body:JSON.stringify({
-         checked_in:false,ac:0,pz:0,services:0,biz:0,acc:0,step:"",notes:"",
+         checked_in:false,ac:0,pz:0,services:0,biz:0,acc:0,demo:0,step:"",notes:"",
          revision:Date.now(),updated_at:new Date().toISOString(),updated_by:CLIENT_ID
        })},key);
     data=pzUnique((rows||[]).map(pzFromCloud));
