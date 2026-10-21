@@ -2886,7 +2886,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       if (slamFilter === "SLAM") matchSlam = (currentTab === 'daily' || currentTab === 'priorday') ? hits === 5 : p.slamsAchieved > 0;
       if (slamFilter === "NEAR") matchSlam = (currentTab === 'daily' || currentTab === 'priorday') ? hits === 4 : false;
 
-      const hiddenByCollapse = currentTab === 'daily' && uncheckedMembersCollapsed && !isChecked;
+      const hiddenByCollapse = currentTab === 'daily' && uncheckedMembersCollapsed && !isChecked && checkinFilter !== 'OUT' && q === '';
       const rowEl = document.getElementById(`row-${p.id}`);
       if (rowEl) {
         if (matchName && matchRole && matchCheckin && matchStep && matchSlam && !hiddenByCollapse) {
