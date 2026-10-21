@@ -1904,6 +1904,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
               name: displayMemberName(savedItem.name),
               role: savedItem.role || "Specialist",
               checkedIn: false,
+              demo: 0,
               ac: 0,
               upgrade: 0,
               services: 0,
@@ -1920,6 +1921,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
             }
           }
           target.checkedIn = !!savedItem.checkedIn;
+          target.demo = Number(savedItem.demo || 0);
           target.ac = savedItem.ac || 0;
           target.upgrade = savedItem.upgrade || 0;
           target.services = savedItem.services || 0;
