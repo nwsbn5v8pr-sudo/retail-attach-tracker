@@ -3532,6 +3532,12 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
   }
 
   async function scheduledPzDailyArchive(){
+    const now = new Date();
+    const pacific = zonedParts(now);
+    const boundary = rolloverConfig();
+    const pastPacificBoundary = pacific.hour > boundary.hour ||
+      (pacific.hour === boundary.hour && pacific.minute >= boundary.minute);
+
     const today=getTodayString();
 
     let liveDay=null;
@@ -3540,12 +3546,16 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
     let lastArchived=null;
     try{lastArchived=localStorage.getItem("pz_last_daily_archive_date");}catch(e){}
 
-    // Date-change rollover: there is NO fixed rollover time.
-    // When the calendar day changes, archive the previous live shift.
-    // The cloud archive function is the safety gate: if saving fails,
-    // the live board is never cleared.
-    if(liveDay && liveDay!==today && lastArchived!==liveDay && stateHydrated){
-      await archiveAndClearPzDay(liveDay,"calendar-day-change");
+    // HARD SAFETY GUARD: never roll over while the Pacific clock is still
+    // on the same calendar date as the live shift and before 11:59 PM.
+    // This prevents a stale/mismatched day stamp from clearing today's board
+    // early (for example, at 8:59/9:00 PM because of an older local-time build).
+    // If the app was offline overnight, a prior liveDay is still eligible for
+    // catch-up because the current Pacific calendar date is now later.
+    if (!liveDay || liveDay === today || !stateHydrated) return;
+    if (!pastPacificBoundary && liveDay >= pacific.date) return;
+    if (lastArchived !== liveDay) {
+      await archiveAndClearPzDay(liveDay,"pacific-11:59-pm-rollover");
     }
   }
 
