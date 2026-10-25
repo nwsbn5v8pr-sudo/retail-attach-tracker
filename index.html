@@ -3697,6 +3697,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
 
     data.forEach(d => {
       d.checkedIn = false;
+      d.demo = 0;
       d.ac = 0;
       d.upgrade = 0;
       d.services = 0;
@@ -3961,6 +3962,7 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
 
             data.forEach(function(d) {
               d.checkedIn = false;
+              d.demo = 0;
               d.ac = 0;
               d.upgrade = 0;
               d.services = 0;
@@ -4182,11 +4184,11 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
               // and the incoming revision is not a known explicit reset.
               const incomingBlank =
                 !incoming.checkedIn &&
-                ((incoming.ac||0)+(incoming.upgrade||0)+(incoming.services||0)+
+                ((incoming.demo||0)+(incoming.ac||0)+(incoming.upgrade||0)+(incoming.services||0)+
                  (incoming.biz||0)+(incoming.acc||0)) === 0;
               const localActive =
                 !!local.checkedIn ||
-                ((local.ac||0)+(local.upgrade||0)+(local.services||0)+
+                ((local.demo||0)+(local.ac||0)+(local.upgrade||0)+(local.services||0)+
                  (local.biz||0)+(local.acc||0)) > 0;
 
               if (incomingBlank && localActive && !msg.dayReset) return;
