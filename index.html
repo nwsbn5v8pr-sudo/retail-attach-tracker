@@ -3706,7 +3706,9 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
       d.step = "";
       d.notes = "";
       d.updatedAt = lastManualResetTs;
-      d.rev = nextRev();
+      // Reset revisions must outrank queued edits from before the reset.
+      d.rev = Math.max(lastManualResetTs, nextRev());
+      observeRev(d.rev);
       d.revBy = sourceClientId || CLIENT_ID;
     });
 
@@ -3971,7 +3973,10 @@ const INITIAL_ROSTER = [{"name": "Felipe F.", "role": "Business Expert"}, {"name
               d.step = "";
               d.notes = "";
               d.updatedAt = Math.max(Number(d.updatedAt || 0), resetTs);
-              d.rev = nextRev();
+              // Give the rollover a wall-clock-scale revision so delayed deltas
+              // from an older shift cannot restore yesterday's Demo or metrics.
+              d.rev = Math.max(resetTs, nextRev());
+              observeRev(d.rev);
               d.revBy = msg.clientId || 'remote';
             });
 
