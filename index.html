@@ -3124,7 +3124,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
     const defs=[['demo','🤳 Demo'],['ac','🍎 AppleCare+'],['upgrade','🆙 Upgrades'],['services','🛍️ Services'],['biz','💼 Business'],['acc','🎧 Accessories']];
     host.innerHTML='';
     ['Chris W Team','Dee’s Team'].forEach(team=>{
-      const members=TEAM_ROSTER.filter(r=>r.team===team).map(r=>{const m=data.find(d=>pzRosterKey(d.name)===pzRosterKey(r.name))||{};return Object.assign({},m,r);});
+      const members=TEAM_ROSTER.map((r,index)=>({r,m:data[index]||{}})).filter(x=>x.r.team===team).map(x=>Object.assign({},x.m,x.r));
       const totals={};defs.forEach(([k])=>totals[k]=members.reduce((s,m)=>s+Number(m[k]||0),0));
       const units=Object.values(totals).reduce((s,n)=>s+n,0);
       const card=document.createElement('article');card.className='team-performance-card';
