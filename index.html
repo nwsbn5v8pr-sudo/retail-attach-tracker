@@ -3133,16 +3133,16 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
     if(proVsProNpsLoadPromise)return proVsProNpsLoadPromise;
     proVsProNpsLoadPromise=(async()=>{
       try{
-        const rows=await pzRestRequest(PZ_NPS_STREAKS_TABLE+'?select=member_name,streak_count',{},window.PZ_WORKING_API_KEY||SUPABASE_PUBLISHABLE_KEY);
+        const rows=await pzRestRequest(PZ_NPS_STREAKS_TABLE+'?select=team_name,member_name,streak_count',{},window.PZ_WORKING_API_KEY||SUPABASE_PUBLISHABLE_KEY);
         proVsProNpsStreaks={};
-        (Array.isArray(rows)?rows:[]).forEach(r=>{proVsProNpsStreaks[String(r.member_name||'').trim().toLowerCase()]=Math.max(0,Number(r.streak_count)||0);});
+        (Array.isArray(rows)?rows:[]).forEach(r=>{proVsProNpsStreaks[String(r.team_name||'')+'::'+String(r.member_name||'').trim().toLowerCase()]=Math.max(0,Number(r.streak_count)||0);});
         proVsProNpsLoaded=true;return true;
       }catch(e){syncWarn('PRO VS PRO NPS STREAKS LOAD FAILED',e);return false;}
       finally{proVsProNpsLoadPromise=null;}
     })();
     return proVsProNpsLoadPromise;
   }
-  async function saveProVsProNpsStreak(name,value){
+  async function saveProVsProNpsStreak(team,name,value){
     if(currentTab!=='teams')return;
     const count=Math.max(0,Math.floor(Number(value)||0));
     const key=String(name||'').trim().toLowerCase();
@@ -3152,7 +3152,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
       await pzRestRequest(PZ_NPS_STREAKS_TABLE+'?on_conflict=member_name',{
         method:'POST',
         headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},
-        body:JSON.stringify({member_name:String(name||'').trim(),streak_count:count,updated_at:new Date().toISOString()})
+        body:JSON.stringify({team_name:String(team||''),member_name:String(name||'').trim(),streak_count:count,updated_at:new Date().toISOString()})
       },window.PZ_WORKING_API_KEY||SUPABASE_PUBLISHABLE_KEY);
       flashAutoSaveBadge('✅ NPS streak saved');
     }catch(e){syncWarn('PRO VS PRO NPS STREAK SAVE FAILED',e);flashAutoSaveBadge('⚠️ NPS streak did not save');}
@@ -3166,7 +3166,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
     }
     const defs=[['ac','🍎 AppleCare+'],['upgrade','🆙 Upgrades'],['services','🛍️ Services'],['biz','💼 Business'],['acc','🎧 Accessories']];
     const metrics=defs.map(x=>x[0]);
-    const totalsByRoster=TEAM_ROSTER.map(r=>Object.assign(Object.fromEntries(metrics.map(k=>[k,0])),{slams:0,bonus:0,nps:Number(proVsProNpsStreaks[String(r.name||'').trim().toLowerCase()]||0)}));
+    const totalsByRoster=TEAM_ROSTER.map(r=>Object.assign(Object.fromEntries(metrics.map(k=>[k,0])),{slams:0,bonus:0,nps:Number(proVsProNpsStreaks[String(r.team||'')+'::'+String(r.name||'').trim().toLowerCase()]||0)}));
     totalsByRoster.forEach(m=>{m.npsBonus=Math.floor(m.nps/10)*20;});
     const datesInRange=d=>String(d||'')>=PRO_VS_PRO_START&&String(d||'')<=PRO_VS_PRO_END;
     const addMember=(idx,member)=>{
@@ -3200,13 +3200,13 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
       const npsBonus=members.reduce((sum,m)=>sum+m.npsBonus,0);
       const units=Object.values(totals).reduce((sum,n)=>sum+n,0),points=units+slamBonus+npsBonus;
       const card=document.createElement('article');card.className='team-performance-card';
-      card.innerHTML='<h2>'+team+'</h2><div class="team-performance-sub">'+members.length+' assigned · Competition-to-date totals</div><div class="team-metric-grid">'+defs.map(([k,label])=>'<div class="team-metric"><span>'+label+'</span><strong>'+totals[k]+'</strong></div>').join('')+'<div class="team-metric"><span>🏆 Grand Slams</span><strong>'+slams+'</strong></div><div class="team-metric"><span>⭐ Slam Bonus</span><strong>+'+slamBonus+'</strong></div><div class="team-metric"><span>📈 NPS Bonus</span><strong>+'+npsBonus+'</strong></div><div class="team-metric"><span>🏁 Total Points</span><strong>'+points+'</strong></div></div><div class="team-section-title">Individual Contributions</div><div class="team-roster-wrap"><table class="team-roster-table"><thead><tr><th>Team Member</th><th>AppleCare+</th><th>Upgrades</th><th>Services</th><th>Business</th><th>Accessories</th><th>Grand Slams</th><th>Slam Bonus</th><th>NPS Streaks</th><th>NPS Bonus</th><th>Total Bonus</th><th>Points</th></tr></thead><tbody>'+members.map(m=>'<tr><td>'+escapeHtml(m.name)+'</td>'+defs.map(([k])=>'<td>'+Number(m[k]||0)+'</td>').join('')+'<td>'+m.slams+'</td><td>+'+m.bonus+'</td><td><input class="nps-streak-input" type="number" min="0" step="1" inputmode="numeric" aria-label="NPS streaks for '+escapeHtml(m.name)+'" data-nps-member="'+escapeHtml(m.name)+'" value="'+m.nps+'" style="width:76px;max-width:100%;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border);border-radius:7px;padding:6px;text-align:center;"></td><td>+'+m.npsBonus+'</td><td>+'+(m.bonus+m.npsBonus)+'</td><td><strong>'+(defs.reduce((sum,[k])=>sum+Number(m[k]||0),0)+m.bonus+m.npsBonus)+'</strong></td></tr>').join('')+'<tr class="team-total-row"><td>TEAM TOTAL</td>'+defs.map(([k])=>'<td>'+totals[k]+'</td>').join('')+'<td>'+slams+'</td><td>+'+slamBonus+'</td><td>—</td><td>+'+npsBonus+'</td><td>+'+(slamBonus+npsBonus)+'</td><td>'+points+'</td></tr></tbody></table></div>';
+      card.innerHTML='<h2>'+team+'</h2><div class="team-performance-sub">'+members.length+' assigned · Competition-to-date totals</div><div class="team-metric-grid">'+defs.map(([k,label])=>'<div class="team-metric"><span>'+label+'</span><strong>'+totals[k]+'</strong></div>').join('')+'<div class="team-metric"><span>🏆 Grand Slams</span><strong>'+slams+'</strong></div><div class="team-metric"><span>⭐ Slam Bonus</span><strong>+'+slamBonus+'</strong></div><div class="team-metric"><span>📈 NPS Bonus</span><strong>+'+npsBonus+'</strong></div><div class="team-metric"><span>🏁 Total Points</span><strong>'+points+'</strong></div></div><div class="team-section-title">Individual Contributions</div><div class="team-roster-wrap"><table class="team-roster-table"><thead><tr><th>Team Member</th><th>AppleCare+</th><th>Upgrades</th><th>Services</th><th>Business</th><th>Accessories</th><th>Grand Slams</th><th>Slam Bonus</th><th>NPS Streaks</th><th>NPS Bonus</th><th>Total Bonus</th><th>Points</th></tr></thead><tbody>'+members.map(m=>'<tr><td>'+escapeHtml(m.name)+'</td>'+defs.map(([k])=>'<td>'+Number(m[k]||0)+'</td>').join('')+'<td>'+m.slams+'</td><td>+'+m.bonus+'</td><td><input class="nps-streak-input" type="number" min="0" step="1" inputmode="numeric" aria-label="NPS streaks for '+escapeHtml(m.name)+'" data-nps-member="'+escapeHtml(m.name)+'" data-nps-team="'+escapeHtml(m.team)+'" value="'+m.nps+'" style="width:76px;max-width:100%;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border);border-radius:7px;padding:6px;text-align:center;"></td><td>+'+m.npsBonus+'</td><td>+'+(m.bonus+m.npsBonus)+'</td><td><strong>'+(defs.reduce((sum,[k])=>sum+Number(m[k]||0),0)+m.bonus+m.npsBonus)+'</strong></td></tr>').join('')+'<tr class="team-total-row"><td>TEAM TOTAL</td>'+defs.map(([k])=>'<td>'+totals[k]+'</td>').join('')+'<td>'+slams+'</td><td>+'+slamBonus+'</td><td>—</td><td>+'+npsBonus+'</td><td>+'+(slamBonus+npsBonus)+'</td><td>'+points+'</td></tr></tbody></table></div>';
       host.appendChild(card);
     });
     if(!host.dataset.npsHandler){
       host.addEventListener('change',function(e){
         const input=e.target.closest('.nps-streak-input');if(!input)return;
-        saveProVsProNpsStreak(input.dataset.npsMember,input.value);
+        saveProVsProNpsStreak(input.dataset.npsTeam,input.dataset.npsMember,input.value);
       });
       host.dataset.npsHandler='1';
     }
