@@ -724,8 +724,10 @@ window.pzEnforcePassword = pzEnforcePassword;
     z-index: 30;
   }
 
-  .team-performance-page{display:none}
-  .team-compare-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:14px}
+  .team-performance-page{display:none;width:calc(100vw - 30px);max-width:none;position:relative;left:50%;transform:translateX(-50%);box-sizing:border-box}
+  .team-compare-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:14px;width:100%;box-sizing:border-box}
+  .team-performance-card{min-width:0;width:100%;box-sizing:border-box}
+  @media(max-width:700px){.team-compare-grid{grid-template-columns:minmax(0,1fr)}}
   .team-performance-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:16px}
   .team-performance-card h2{font-size:17px;margin-bottom:4px}
   .team-performance-sub{color:var(--text-secondary);font-size:12px;margin-bottom:12px}
@@ -3123,7 +3125,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
   const PRO_VS_PRO_END = '2027-01-31';
   function renderTeamPerformance(){
     const host=document.getElementById('teamCompareGrid');if(!host)return;
-    const defs=[['demo','🤳 Demo'],['ac','🍎 AppleCare+'],['upgrade','🆙 Upgrades'],['services','🛍️ Services'],['biz','💼 Business'],['acc','🎧 Accessories']];
+    const defs=[['ac','🍎 AppleCare+'],['upgrade','🆙 Upgrades'],['services','🛍️ Services'],['biz','💼 Business'],['acc','🎧 Accessories']];
     const metrics=defs.map(x=>x[0]);
     const totalsByRoster=TEAM_ROSTER.map(()=>Object.fromEntries(metrics.map(k=>[k,0])));
     const datesInRange=d=>String(d||'')>=PRO_VS_PRO_START&&String(d||'')<=PRO_VS_PRO_END;
@@ -3157,7 +3159,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
       const totals={};defs.forEach(([k])=>totals[k]=members.reduce((sum,m)=>sum+Number(m[k]||0),0));
       const units=Object.values(totals).reduce((sum,n)=>sum+n,0);
       const card=document.createElement('article');card.className='team-performance-card';
-      card.innerHTML='<h2>'+team+'</h2><div class="team-performance-sub">'+members.length+' assigned · Competition-to-date totals</div><div class="team-metric-grid">'+defs.map(([k,label])=>'<div class="team-metric"><span>'+label+'</span><strong>'+totals[k]+'</strong></div>').join('')+'<div class="team-metric"><span>📦 Total Units</span><strong>'+units+'</strong></div></div><div class="team-section-title">Individual Contributions</div><div class="team-roster-wrap"><table class="team-roster-table"><thead><tr><th>Team Member</th><th>Demo</th><th>AppleCare+</th><th>Upgrades</th><th>Services</th><th>Business</th><th>Accessories</th><th>Total</th></tr></thead><tbody>'+members.map(m=>'<tr><td>'+escapeHtml(m.name)+'</td>'+defs.map(([k])=>'<td>'+Number(m[k]||0)+'</td>').join('')+'<td><strong>'+defs.reduce((sum,[k])=>sum+Number(m[k]||0),0)+'</strong></td></tr>').join('')+'<tr class="team-total-row"><td>TEAM TOTAL</td>'+defs.map(([k])=>'<td>'+totals[k]+'</td>').join('')+'<td>'+units+'</td></tr></tbody></table></div>';
+      card.innerHTML='<h2>'+team+'</h2><div class="team-performance-sub">'+members.length+' assigned · Competition-to-date totals</div><div class="team-metric-grid">'+defs.map(([k,label])=>'<div class="team-metric"><span>'+label+'</span><strong>'+totals[k]+'</strong></div>').join('')+'<div class="team-metric"><span>📦 Total Units</span><strong>'+units+'</strong></div></div><div class="team-section-title">Individual Contributions</div><div class="team-roster-wrap"><table class="team-roster-table"><thead><tr><th>Team Member</th><th>AppleCare+</th><th>Upgrades</th><th>Services</th><th>Business</th><th>Accessories</th><th>Total</th></tr></thead><tbody>'+members.map(m=>'<tr><td>'+escapeHtml(m.name)+'</td>'+defs.map(([k])=>'<td>'+Number(m[k]||0)+'</td>').join('')+'<td><strong>'+defs.reduce((sum,[k])=>sum+Number(m[k]||0),0)+'</strong></td></tr>').join('')+'<tr class="team-total-row"><td>TEAM TOTAL</td>'+defs.map(([k])=>'<td>'+totals[k]+'</td>').join('')+'<td>'+units+'</td></tr></tbody></table></div>';
       host.appendChild(card);
     });
   }
