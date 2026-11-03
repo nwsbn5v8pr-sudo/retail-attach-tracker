@@ -3119,16 +3119,45 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
   }
 
   /* 📑 TAB SWITCHING LOGIC */
+  const PRO_VS_PRO_START = '2026-11-07';
+  const PRO_VS_PRO_END = '2027-01-31';
   function renderTeamPerformance(){
     const host=document.getElementById('teamCompareGrid');if(!host)return;
     const defs=[['demo','🤳 Demo'],['ac','🍎 AppleCare+'],['upgrade','🆙 Upgrades'],['services','🛍️ Services'],['biz','💼 Business'],['acc','🎧 Accessories']];
-    host.innerHTML='';
+    const metrics=defs.map(x=>x[0]);
+    const totalsByRoster=TEAM_ROSTER.map(()=>Object.fromEntries(metrics.map(k=>[k,0])));
+    const datesInRange=d=>String(d||'')>=PRO_VS_PRO_START&&String(d||'')<=PRO_VS_PRO_END;
+    const addSnapshot=(snapshot)=>{
+      const rows=Array.isArray(snapshot&&snapshot.data)?snapshot.data:[];
+      const used=new Set();
+      rows.forEach(member=>{
+        let idx=TEAM_ROSTER.findIndex((r,i)=>!used.has(i)&&String(r.name||'').trim().toLowerCase()===String(member.name||'').trim().toLowerCase());
+        if(idx<0)return;
+        used.add(idx);
+        metrics.forEach(k=>totalsByRoster[idx][k]+=Number(member[k]||0));
+      });
+    };
+    (historyRecords||[]).filter(r=>datesInRange(r.date)).forEach(addSnapshot);
+    let liveDate='';
+    try{liveDate=localStorage.getItem(STORAGE_KEY_LIVE_DAY)||getTodayString();}catch(e){liveDate=getTodayString();}
+    if(datesInRange(liveDate)){
+      const used=new Set();
+      TEAM_ROSTER.forEach((r,i)=>{
+        const member=data[i]||{};
+        if(!member.name)return;
+        const idx=TEAM_ROSTER.findIndex((candidate,j)=>!used.has(j)&&String(candidate.name||'').trim().toLowerCase()===String(member.name||'').trim().toLowerCase());
+        if(idx<0)return;
+        used.add(idx);
+        metrics.forEach(k=>totalsByRoster[idx][k]+=Number(member[k]||0));
+      });
+    }
+    host.innerHTML='<div style="grid-column:1/-1;color:var(--text-secondary);font-size:12px;margin:0 0 2px;">Competition totals · Nov 7, 2026 – Jan 31, 2027 · Saved daily activity only</div>';
     ['Chris W Team','Dee’s Team'].forEach(team=>{
-      const members=TEAM_ROSTER.map((r,index)=>({r,m:data[index]||{}})).filter(x=>x.r.team===team).map(x=>Object.assign({},x.m,x.r));
-      const totals={};defs.forEach(([k])=>totals[k]=members.reduce((s,m)=>s+Number(m[k]||0),0));
-      const units=Object.values(totals).reduce((s,n)=>s+n,0);
+      const members=TEAM_ROSTER.map((r,index)=>Object.assign({},r,totalsByRoster[index])).filter(m=>m.team===team);
+      const totals={};defs.forEach(([k])=>totals[k]=members.reduce((sum,m)=>sum+Number(m[k]||0),0));
+      const units=Object.values(totals).reduce((sum,n)=>sum+n,0);
       const card=document.createElement('article');card.className='team-performance-card';
-      card.innerHTML='<h2>'+team+'</h2><div class="team-performance-sub">'+members.length+' assigned · '+members.filter(m=>m.checkedIn).length+' checked in</div><div class="team-metric-grid">'+defs.map(([k,label])=>'<div class="team-metric"><span>'+label+'</span><strong>'+totals[k]+'</strong></div>').join('')+'<div class="team-metric"><span>📦 Total Units</span><strong>'+units+'</strong></div></div><div class="team-section-title">Individual Contributions</div><div class="team-roster-wrap"><table class="team-roster-table"><thead><tr><th>Team Member</th><th>Demo</th><th>AppleCare+</th><th>Upgrades</th><th>Services</th><th>Business</th><th>Accessories</th><th>Total</th></tr></thead><tbody>'+members.map(m=>'<tr><td>'+escapeHtml(m.name)+' <span style="color:var(--text-secondary);font-size:10px;">· '+(m.checkedIn?'In':'Out')+'</span></td>'+defs.map(([k])=>'<td>'+Number(m[k]||0)+'</td>').join('')+'<td><strong>'+defs.reduce((s,[k])=>s+Number(m[k]||0),0)+'</strong></td></tr>').join('')+'<tr class="team-total-row"><td>TEAM TOTAL</td>'+defs.map(([k])=>'<td>'+totals[k]+'</td>').join('')+'<td>'+units+'</td></tr></tbody></table></div>';
+      card.innerHTML='<h2>'+team+'</h2><div class="team-performance-sub">'+members.length+' assigned · Competition-to-date totals</div><div class="team-metric-grid">'+defs.map(([k,label])=>'<div class="team-metric"><span>'+label+'</span><strong>'+totals[k]+'</strong></div>').join('')+'<div class="team-metric"><span>📦 Total Units</span><strong>'+units+'</strong></div></div><div class="team-section-title">Individual Contributions</div><div class="team-roster-wrap"><table class="team-roster-table"><thead><tr><th>Team Member</th><th>Demo</th><th>AppleCare+</th><th>Upgrades</th><th>Services</th><th>Business</th><th>Accessories</th><th>Total</th></tr></thead><tbody>'+members.map(m=>'<tr><td>'+escapeHtml(m.name)+'</td>'+defs.map(([k])=>'<td>'+Number(m[k]||0)+'</td>').join('')+'<td><strong>'+defs.reduce((sum,[k])=>sum+Number(m[k]||0),0)+'</strong></td></tr>').join('')+'<tr class="team-total-row"><td>TEAM TOTAL</td>'+defs.map(([k])=>'<td>'+totals[k]+'</td>').join('')+'<td>'+units+'</td></tr></tbody></table></div>';
       host.appendChild(card);
     });
   }
