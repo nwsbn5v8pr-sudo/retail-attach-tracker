@@ -742,6 +742,15 @@ window.pzEnforcePassword = pzEnforcePassword;
   .team-roster-table th{color:var(--text-secondary);font-size:10px;text-transform:uppercase}
   .team-section-title{font-size:15px;font-weight:800;margin:18px 0 9px}
   .team-total-row td{font-weight:800;background:var(--bg-primary)}
+  .pz-pro-roster-card{margin-bottom:14px}
+  .pz-pro-roster-group{margin-top:12px}
+  .pz-pro-roster-group:first-child{margin-top:0}
+  .pz-pro-roster-group h3{font-size:15px;font-weight:800;margin:0 0 7px}
+  .pz-pro-roster-chips{display:flex;flex-wrap:wrap;gap:7px}
+  .pz-pro-roster-chip{display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:9px 11px;border-radius:24px;background:var(--bg-primary);border:1px solid var(--border);font-size:13px;line-height:1.25}
+  .pz-pro-roster-chip strong{font-weight:700}
+  .pz-pro-roster-chip span{font-size:12px;color:var(--text-secondary)}
+  @media(max-width:700px){.pz-pro-roster-chip{padding:8px 10px}.pz-pro-roster-chip span{font-size:11px}}
 
   /* History Logs Card */
   .history-card {
@@ -1255,7 +1264,14 @@ window.pzEnforcePassword = pzEnforcePassword;
       <button class="tab-btn active" id="pro-view-standings" onclick="switchProVsProView('standings')" role="tab" aria-selected="true">🏆 Standings</button>
       <button class="tab-btn" id="pro-view-rules" onclick="switchProVsProView('rules')" role="tab" aria-selected="false">📋 Rules</button>
     </div>
-    <div id="proVsProStandings"><div class="team-compare-grid" id="teamCompareGrid"></div></div>
+    <div id="proVsProStandings">
+      <article class="team-performance-card pz-pro-roster-card">
+        <h2>👥 Pro Vs Pro Team Rosters</h2>
+        <p class="team-performance-sub">Current PZ team assignments and roles</p>
+        <div id="proVsProRoster"></div>
+      </article>
+      <div class="team-compare-grid" id="teamCompareGrid"></div>
+    </div>
     <div id="rulesPage" style="display:none;">
     <div style="margin:4px 0 14px;">
       <h2 style="font-size:20px;font-weight:800;">📋 How to Earn Points</h2>
@@ -3208,8 +3224,17 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
       flashAutoSaveBadge('✅ NPS streak saved');
     }catch(e){syncWarn('PRO VS PRO NPS STREAK SAVE FAILED',e);flashAutoSaveBadge('⚠️ NPS streak did not save');}
   }
+  function renderProVsProRoster(){
+    const host=document.getElementById('proVsProRoster');if(!host)return;
+    host.innerHTML=["Chris W Team","Dee’s Team"].map(team=>{
+      const members=TEAM_ROSTER.filter(member=>member.team===team);
+      return '<section class="pz-pro-roster-group"><h3>'+escapeHtml(team)+'</h3><div class="pz-pro-roster-chips">'+members.map(member=>'<div class="pz-pro-roster-chip"><strong>'+escapeHtml(member.name)+'</strong><span>'+escapeHtml(member.role||'Specialist')+'</span></div>').join('')+'</div></section>';
+    }).join('');
+  }
+
   function renderTeamPerformance(){
     const host=document.getElementById('teamCompareGrid');if(!host)return;
+    renderProVsProRoster();
     if(!proVsProNpsLoaded){
       host.innerHTML='<div style="grid-column:1/-1;color:var(--text-secondary);padding:16px;">Loading NPS streaks…</div>';
       loadProVsProNpsStreaks().then(()=>{if(currentTab==='teams')renderTeamPerformance();});
