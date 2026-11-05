@@ -1095,6 +1095,7 @@ window.pzEnforcePassword = pzEnforcePassword;
       <button class="tab-btn" id="tab-monthly" onclick="switchTab('monthly')" role="tab">🗓️ Monthly</button>
       <button class="tab-btn" id="tab-quarterly" onclick="switchTab('quarterly')" role="tab">📈 Quarterly</button>
       <button class="tab-btn" id="tab-history" onclick="switchTab('history')" role="tab">📜 History</button>
+      <button class="tab-btn" id="tab-rules" onclick="switchTab('rules')" role="tab">📋 Rules</button>
     </div>
     <select class="period-selector" id="periodSelector" style="display:none;" onchange="onPeriodChange()" aria-label="Select reporting period"></select>
   </div>
@@ -1249,6 +1250,49 @@ window.pzEnforcePassword = pzEnforcePassword;
     <div id="historyListContainer"></div>
   </div>
   <section class="team-performance-page" id="teamPerformancePage"><div style="margin:4px 0 14px;"><h2 style="font-size:20px;font-weight:800;">🏅 Pro Vs Pro</h2><p style="color:var(--text-secondary);font-size:12px;margin-top:4px;">Live team totals are calculated from each person’s individual activity.</p></div><div class="team-compare-grid" id="teamCompareGrid"></div></section>
+  <section class="team-performance-page" id="rulesPage">
+    <div style="margin:4px 0 14px;">
+      <h2 style="font-size:20px;font-weight:800;">📋 How to Earn Points</h2>
+      <p style="color:var(--text-secondary);font-size:13px;margin-top:4px;">A simple guide to Pro Vs Pro scoring and verification.</p>
+    </div>
+    <article class="team-performance-card" style="margin-bottom:14px;">
+      <h2>⭐ Base Points</h2>
+      <p class="team-performance-sub">Every qualifying result earns 1 point.</p>
+      <div class="team-metric-grid">
+        <div class="team-metric"><span>🍎 AppleCare+</span><strong>1 pt</strong></div>
+        <div class="team-metric"><span>🆙 Upgrades</span><strong>1 pt</strong></div>
+        <div class="team-metric"><span>🛍️ Services</span><strong>1 pt</strong></div>
+        <div class="team-metric"><span>💼 Business</span><strong>1 pt</strong></div>
+        <div class="team-metric"><span>🎧 Accessories</span><strong>1 pt</strong></div>
+      </div>
+    </article>
+    <article class="team-performance-card" style="margin-bottom:14px;">
+      <h2>🏆 Bonus Points</h2>
+      <ul style="padding-left:20px;line-height:1.8;margin-top:10px;">
+        <li><strong>Grand Slam: +10 points</strong> when all five qualifying categories are achieved in the same daily snapshot.</li>
+        <li><strong>NPS: +20 points</strong> for every 10 NPS streaks recorded. Each completed group of 10 earns another 20 points.</li>
+      </ul>
+    </article>
+    <article class="team-performance-card" style="margin-bottom:14px;">
+      <h2>🧾 Receipt & Transaction Verification</h2>
+      <p style="font-size:14px;line-height:1.65;margin-top:10px;"><strong>Every transaction counted toward points must be verifiable.</strong> Team members must provide either:</p>
+      <ul style="padding-left:20px;line-height:1.8;margin-top:8px;">
+        <li>A printed receipt showing the qualifying transaction, or</li>
+        <li>A visual check of the recent transaction in <strong>Easy Pay</strong>.</li>
+      </ul>
+      <p style="font-size:13px;line-height:1.6;color:var(--text-secondary);margin-top:10px;">If the transaction cannot be verified using one of these methods, do not count it until it can be confirmed. Keep customer information private when showing transaction details.</p>
+    </article>
+    <article class="team-performance-card">
+      <h2>📌 Scoring Guidelines</h2>
+      <ul style="padding-left:20px;line-height:1.8;margin-top:10px;">
+        <li>Only qualifying activity in the Pro Vs Pro competition period counts toward competition totals.</li>
+        <li>Each qualifying category result is worth one base point.</li>
+        <li>Grand Slam and NPS bonuses are added on top of base points.</li>
+        <li>Demo activity and check-ins are tracked in the daily tracker but do not add Pro Vs Pro points.</li>
+        <li>Verify the transaction before adding it to the tracker. Ask a leader if a transaction or category is unclear.</li>
+      </ul>
+    </article>
+  </section>
 
 <script id="pz-static-passgate-script">
 (function () {
@@ -3229,8 +3273,18 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
     const btnAddMember = document.getElementById('btnAddMember');
 
     const teamPage=document.getElementById('teamPerformancePage');
+    const rulesPage=document.getElementById('rulesPage');
     const topPerformers=document.getElementById('topPerformersSection');
     const kpiGrid=document.querySelector('.kpi-grid');
+    if(rulesPage)rulesPage.style.display='none';
+    if(tab==='rules'){
+      mainTableCard.style.display='none';historyCard.style.display='none';filterPanel.style.display='none';
+      if(teamPage)teamPage.style.display='none';if(rulesPage)rulesPage.style.display='block';
+      if(topPerformers)topPerformers.style.display='none';if(kpiGrid)kpiGrid.style.display='none';
+      if(periodSelector)periodSelector.style.display='none';
+      ['btnUndo','btnArchive','btnClearCheckins','btnReset','btnAddMember'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+      return;
+    }
     if(tab==='teams'){
       mainTableCard.style.display='none';historyCard.style.display='none';filterPanel.style.display='none';
       if(teamPage)teamPage.style.display='block';if(topPerformers)topPerformers.style.display='none';if(kpiGrid)kpiGrid.style.display='none';
