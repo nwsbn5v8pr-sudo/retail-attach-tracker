@@ -1095,7 +1095,7 @@ window.pzEnforcePassword = pzEnforcePassword;
       <button class="tab-btn" id="tab-monthly" onclick="switchTab('monthly')" role="tab">🗓️ Monthly</button>
       <button class="tab-btn" id="tab-quarterly" onclick="switchTab('quarterly')" role="tab">📈 Quarterly</button>
       <button class="tab-btn" id="tab-history" onclick="switchTab('history')" role="tab">📜 History</button>
-      <button class="tab-btn" id="tab-rules" onclick="switchTab('rules')" role="tab">📋 Rules</button>
+      
     </div>
     <select class="period-selector" id="periodSelector" style="display:none;" onchange="onPeriodChange()" aria-label="Select reporting period"></select>
   </div>
@@ -1249,15 +1249,21 @@ window.pzEnforcePassword = pzEnforcePassword;
     </div>
     <div id="historyListContainer"></div>
   </div>
-  <section class="team-performance-page" id="teamPerformancePage"><div style="margin:4px 0 14px;"><h2 style="font-size:20px;font-weight:800;">🏅 Pro Vs Pro</h2><p style="color:var(--text-secondary);font-size:12px;margin-top:4px;">Live team totals are calculated from each person’s individual activity.</p></div><div class="team-compare-grid" id="teamCompareGrid"></div></section>
-  <section class="team-performance-page" id="rulesPage">
+  <section class="team-performance-page" id="teamPerformancePage">
+    <div style="margin:4px 0 14px;"><h2 style="font-size:20px;font-weight:800;">🏅 Pro Vs Pro</h2><p style="color:var(--text-secondary);font-size:12px;margin-top:4px;">Live team totals are calculated from each person’s individual activity.</p></div>
+    <div class="segmented-control" role="tablist" aria-label="Pro Vs Pro sections" style="margin-bottom:14px;">
+      <button class="tab-btn active" id="pro-view-standings" onclick="switchProVsProView('standings')" role="tab" aria-selected="true">🏆 Standings</button>
+      <button class="tab-btn" id="pro-view-rules" onclick="switchProVsProView('rules')" role="tab" aria-selected="false">📋 Rules</button>
+    </div>
+    <div id="proVsProStandings"><div class="team-compare-grid" id="teamCompareGrid"></div></div>
+    <div id="rulesPage" style="display:none;">
     <div style="margin:4px 0 14px;">
       <h2 style="font-size:20px;font-weight:800;">📋 How to Earn Points</h2>
       <p style="color:var(--text-secondary);font-size:13px;margin-top:4px;">A simple guide to Pro Vs Pro scoring and verification.</p>
     </div>
     <article class="team-performance-card" style="margin-bottom:14px;">
       <h2>⭐ Base Points</h2>
-      <p class="team-performance-sub">Every qualifying result earns 1 point.</p>
+      <p class="team-performance-sub"><strong>Each qualifying transaction earns 1 point.</strong> Points are counted per transaction, not per customer or interaction.</p>
       <div class="team-metric-grid">
         <div class="team-metric"><span>🍎 AppleCare+</span><strong>1 pt</strong></div>
         <div class="team-metric"><span>🆙 Upgrades</span><strong>1 pt</strong></div>
@@ -1292,6 +1298,7 @@ window.pzEnforcePassword = pzEnforcePassword;
         <li>Verify the transaction before adding it to the tracker. Ask a leader if a transaction or category is unclear.</li>
       </ul>
     </article>
+    </div>
   </section>
 
 <script id="pz-static-passgate-script">
@@ -3256,6 +3263,17 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
     }
   }
 
+  function switchProVsProView(view) {
+    const standings=document.getElementById('proVsProStandings');
+    const rules=document.getElementById('rulesPage');
+    const standingsBtn=document.getElementById('pro-view-standings');
+    const rulesBtn=document.getElementById('pro-view-rules');
+    if(standings)standings.style.display=view==='standings'?'block':'none';
+    if(rules)rules.style.display=view==='rules'?'block':'none';
+    if(standingsBtn){standingsBtn.classList.toggle('active',view==='standings');standingsBtn.setAttribute('aria-selected',view==='standings'?'true':'false');}
+    if(rulesBtn){rulesBtn.classList.toggle('active',view==='rules');rulesBtn.setAttribute('aria-selected',view==='rules'?'true':'false');}
+  }
+
   function switchTab(tab) {
     currentTab = tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -3273,24 +3291,14 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
     const btnAddMember = document.getElementById('btnAddMember');
 
     const teamPage=document.getElementById('teamPerformancePage');
-    const rulesPage=document.getElementById('rulesPage');
     const topPerformers=document.getElementById('topPerformersSection');
     const kpiGrid=document.querySelector('.kpi-grid');
-    if(rulesPage)rulesPage.style.display='none';
-    if(tab==='rules'){
-      mainTableCard.style.display='none';historyCard.style.display='none';filterPanel.style.display='none';
-      if(teamPage)teamPage.style.display='none';if(rulesPage)rulesPage.style.display='block';
-      if(topPerformers)topPerformers.style.display='none';if(kpiGrid)kpiGrid.style.display='none';
-      if(periodSelector)periodSelector.style.display='none';
-      ['btnUndo','btnArchive','btnClearCheckins','btnReset','btnAddMember'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
-      return;
-    }
     if(tab==='teams'){
       mainTableCard.style.display='none';historyCard.style.display='none';filterPanel.style.display='none';
       if(teamPage)teamPage.style.display='block';if(topPerformers)topPerformers.style.display='none';if(kpiGrid)kpiGrid.style.display='none';
       if(periodSelector)periodSelector.style.display='none';
       ['btnUndo','btnArchive','btnClearCheckins','btnReset','btnAddMember'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
-      renderTeamPerformance();return;
+      switchProVsProView('standings');renderTeamPerformance();return;
     }
     if(teamPage)teamPage.style.display='none';if(topPerformers)topPerformers.style.display='';if(kpiGrid)kpiGrid.style.display='';
     if (tab === 'history') {
