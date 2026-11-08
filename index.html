@@ -3217,14 +3217,25 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
     const count=Math.max(0,Math.floor(Number(value)||0));
     const key=String(team||'')+'::'+String(name||'').trim().toLowerCase();
     proVsProNpsStreaks[key]=count;
+    proVsProNpsLoaded=true;
     renderTeamPerformance();
     try{
       await pzRestRequest(PZ_NPS_STREAKS_TABLE+'?on_conflict=team_name,member_name',{
         method:'POST',
         headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},
-        body:JSON.stringify({team_name:String(team||''),member_name:String(name||'').trim(),streak_count:count,updated_at:new Date().toISOString()})
+        body:JSON.stringify({team_name:String(team||'').trim(),member_name:String(name||'').trim(),streak_count:count,updated_at:new Date().toISOString()})
       },window.PZ_WORKING_API_KEY||SUPABASE_PUBLISHABLE_KEY);
-      flashAutoSaveBadge('✅ NPS streak saved');
+      // Re-read the persisted values so the visible individual and team bonuses
+      // always reflect the same data that was successfully saved.
+      const savedRows=await pzRestRequest(PZ_NPS_STREAKS_TABLE+'?select=team_name,member_name,streak_count',{},window.PZ_WORKING_API_KEY||SUPABASE_PUBLISHABLE_KEY);
+      proVsProNpsStreaks={};
+      (Array.isArray(savedRows)?savedRows:[]).forEach(row=>{
+        const savedKey=String(row.team_name||'').trim()+'::'+String(row.member_name||'').trim().toLowerCase();
+        proVsProNpsStreaks[savedKey]=Math.max(0,Number(row.streak_count)||0);
+      });
+      proVsProNpsLoaded=true;
+      renderTeamPerformance();
+      flashAutoSaveBadge('✅ NPS streak and bonus saved');
     }catch(e){syncWarn('PRO VS PRO NPS STREAK SAVE FAILED',e);flashAutoSaveBadge('⚠️ NPS streak did not save');}
   }
   function renderTeamPerformance(){
