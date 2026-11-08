@@ -3238,14 +3238,19 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
     let liveDate='';
     try{liveDate=localStorage.getItem(STORAGE_KEY_LIVE_DAY)||getTodayString();}catch(e){liveDate=getTodayString();}
     if(datesInRange(liveDate)){
-      const used=new Set();
+      // Match live rows by employee name, never by array position. The Daily
+      // tracker can reorder rows by role/activity, while TEAM_ROSTER is fixed.
+      const liveByName=new Map();
+      (data||[]).forEach(member=>{
+        const key=String(member&&member.name||'').trim().toLowerCase();
+        if(key&&!liveByName.has(key))liveByName.set(key,member);
+      });
       TEAM_ROSTER.forEach((r,i)=>{
-        const member=data[i]||{};if(!member.name)return;
-        const idx=TEAM_ROSTER.findIndex((candidate,j)=>!used.has(j)&&String(candidate.name||'').trim().toLowerCase()===String(member.name||'').trim().toLowerCase());
-        if(idx<0)return;used.add(idx);addMember(idx,member);
+        const member=liveByName.get(String(r.name||'').trim().toLowerCase());
+        if(member)addMember(i,member);
       });
     }
-    host.innerHTML='<div style="grid-column:1/-1;color:var(--text-secondary);font-size:12px;margin:0 0 2px;">Competition totals · Nov 7, 2026 – Jan 31, 2027 · Grand Slam = +10 · Every 10 NPS streaks = +20 bonus points</div>';
+    host.innerHTML='<div style="grid-column:1/-1;color:var(--text-secondary);font-size:12px;margin:0 0 2px;">Competition totals · Nov 6, 2026 – Jan 31, 2027 · Grand Slam = +10 · Every 10 NPS streaks = +20 bonus points</div>';
     ['Chris W Team','Dee’s Team'].forEach(team=>{
       const members=TEAM_ROSTER.map((r,index)=>Object.assign({},r,totalsByRoster[index])).filter(m=>m.team===team);
       const totals={};defs.forEach(([k])=>totals[k]=members.reduce((sum,m)=>sum+Number(m[k]||0),0));
