@@ -1882,6 +1882,25 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
     return pastBoundary ? shiftDateString(parts.date, 1) : parts.date;
   }
 
+  // Use the shared roster's business date when a device has no local day stamp.
+  // This lets a newly opened/reinstalled iPad catch up and archive the cloud's
+  // previous live shift instead of incorrectly assuming its data is from today.
+  function pzLiveDayFromRows(rows) {
+    const counts = new Map();
+    (rows || []).forEach(function (row) {
+      const date = String(row && row.shift_date || '').slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(date)) counts.set(date, (counts.get(date) || 0) + 1);
+    });
+    let best = null, bestCount = 0;
+    counts.forEach(function (count, date) {
+      if (count > bestCount || (count === bestCount && best && date < best)) {
+        best = date;
+        bestCount = count;
+      }
+    });
+    return best;
+  }
+
   function parseDateSafe(dateStr) {
     if (!dateStr) return new Date();
     const parts = dateStr.split('-');
@@ -2704,6 +2723,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
     if (status === false) {
       data.forEach(d => {
         d.checkedIn = false;
+        d.demo = 0;
         d.ac = 0;
         d.upgrade = 0;
         d.services = 0;
@@ -4923,7 +4943,8 @@ async function supabaseResetDay(){
       {method:"PATCH",
        body:JSON.stringify({
          checked_in:false,ac:0,pz:0,services:0,biz:0,acc:0,demo:0,step:"",notes:"",
-         revision:Date.now(),updated_at:new Date().toISOString(),updated_by:CLIENT_ID
+         revision:Date.now(),updated_at:new Date().toISOString(),updated_by:CLIENT_ID,
+         shift_date:getTodayString()
        })},key);
     data=pzUnique((rows||[]).map(pzFromCloud));
     saveLocalState();
@@ -4991,6 +5012,14 @@ async function initSupabaseSync(){
     const rows=await pzRestRequest(PZ_MEMBERS_TABLE+"?select=*&removed=eq.false&order=name.asc",{},
       workingKey);
     const cloudRows=Array.isArray(rows)?rows:[];
+    // Keep a prior local stamp for overnight catch-up, but if this device has
+    // never stored one, infer the live shift from Supabase before rollover runs.
+    try {
+      if (!localStorage.getItem(STORAGE_KEY_LIVE_DAY)) {
+        const cloudLiveDay = pzLiveDayFromRows(cloudRows);
+        localStorage.setItem(STORAGE_KEY_LIVE_DAY, cloudLiveDay || getTodayString());
+      }
+    } catch (e) {}
     data=pzUnique(cloudRows.map(pzFromCloud));
     stateHydrated=true;
     saveLocalState();
@@ -4998,15 +5027,6 @@ async function initSupabaseSync(){
     updateTotals();
     reorderRows();
     setPzInitialBoardReady(true);
-
-    // Mark this device's live board with the day it belongs to, but NEVER
-    // overwrite an existing older stamp. An older stamp is what lets the
-    // catch-up engine archive a day after an iPad was asleep/closed.
-    try {
-      if (!localStorage.getItem(STORAGE_KEY_LIVE_DAY)) {
-        localStorage.setItem(STORAGE_KEY_LIVE_DAY, getTodayString());
-      }
-    } catch (e) {}
 
     // The history loader requires the cloud connection flag, so it must run
     // AFTER supabaseReady is set. The previous version called it too early,
