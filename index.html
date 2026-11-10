@@ -3275,13 +3275,33 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
       metrics.forEach(k=>totalsByRoster[idx][k]+=Number(member[k]||0));
       if(getHitCount(member)===5){totalsByRoster[idx].slams++;totalsByRoster[idx].bonus+=10;}
     };
+    // Daily/history rows can contain either abbreviated roster names or
+    // full names. Resolve exact names first, then a unique first-name +
+    // surname-initial match. Explicit aliases cover Chris W. -> Christopher W.
+    // Keep Luis S. and Luis SJ distinct because they are different teammates.
+    const normalizeTeamName=value=>String(value||'').toLowerCase()
+      .normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
+      .replace(/[.'’'\\-]/g,'').replace(/\\s+/g,' ').trim();
+    const teamNameAliases={'chris w.':'christopher w.'};
+    const teamRosterIndexForName=(sourceName,used)=>{
+      const source=normalizeTeamName(sourceName);
+      const aliased=normalizeTeamName(teamNameAliases[String(sourceName||'').trim().toLowerCase()]||sourceName);
+      let idx=TEAM_ROSTER.findIndex((r,i)=>!(used&&used.has(i))&&normalizeTeamName(r.name)===aliased);
+      if(idx>=0)return idx;
+      const parts=source.split(' ').filter(Boolean);
+      if(parts.length<2)return -1;
+      const first=parts[0], surnameInitial=parts[1][0];
+      const candidates=TEAM_ROSTER.map((r,i)=>({r,i,parts:normalizeTeamName(r.name).split(' ').filter(Boolean)}))
+        .filter(x=>!(used&&used.has(x.i))&&x.parts.length>=2&&x.parts[0]===first&&x.parts[1][0]===surnameInitial);
+      return candidates.length===1?candidates[0].i:-1;
+    };
     const addSnapshot=(snapshot)=>{
       const rows=Array.isArray(snapshot&&snapshot.data)?snapshot.data:[];
       const used=new Set();
       rows.forEach(member=>{
-        const sourceName=String(member.name||'').trim().toLowerCase();
-        const idx=TEAM_ROSTER.findIndex((r,i)=>!used.has(i)&&(String(r.name||'').trim().toLowerCase()===sourceName||(sourceName==='luis s.'&&r.name==='Luis SJ'&&r.team==='Chris W Team')));
-        if(idx<0)return;used.add(idx);addMember(idx,member);
+        const idx=teamRosterIndexForName(member&&member.name,used);
+        if(idx<0)return;
+        used.add(idx);addMember(idx,member);
       });
     };
     (historyRecords||[]).filter(r=>datesInRange(r.date)).forEach(addSnapshot);
@@ -3290,15 +3310,16 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
     if(datesInRange(liveDate)){
       // Match live rows by employee name, never by array position. The Daily
       // tracker can reorder rows by role/activity, while TEAM_ROSTER is fixed.
-      const liveByName=new Map();
-      (data||[]).forEach(member=>{
-        const key=String(member&&member.name||'').trim().toLowerCase();
-        if(key&&!liveByName.has(key))liveByName.set(key,member);
-      });
+      const usedLiveMembers=new Set();
       TEAM_ROSTER.forEach((r,i)=>{
-        const rosterKey=String(r.name||'').trim().toLowerCase();
-        const member=liveByName.get(rosterKey)||(rosterKey==='luis sj'?liveByName.get('luis s.'):null);
-        if(member)addMember(i,member);
+        const matchIndex=(data||[]).findIndex((member,memberIndex)=>{
+          if(usedLiveMembers.has(memberIndex))return false;
+          return teamRosterIndexForName(member&&member.name)===i;
+        });
+        if(matchIndex>=0){
+          usedLiveMembers.add(matchIndex);
+          addMember(i,data[matchIndex]);
+        }
       });
     }
     host.innerHTML='<div style="grid-column:1/-1;color:var(--text-secondary);font-size:12px;margin:0 0 2px;">Competition totals · Nov 6, 2026 – Jan 31, 2027 · Grand Slam = +10 · Every 10 NPS streaks = +20 bonus points</div>';
