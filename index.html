@@ -3296,10 +3296,17 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
       return candidates.length===1?candidates[0].i:-1;
     };
     const addSnapshot=(snapshot)=>{
-      const rows=Array.isArray(snapshot&&snapshot.data)?snapshot.data:[];
+      // Cloud history rows are stored as {date, data:[...]}; older/local
+      // snapshots may still arrive as {members:[...]} or a bare member array.
+      // Accept all three so archived activity is never silently skipped.
+      const rows=Array.isArray(snapshot)?snapshot:
+        (Array.isArray(snapshot&&snapshot.data)?snapshot.data:
+        (Array.isArray(snapshot&&snapshot.members)?snapshot.members:[]));
       const used=new Set();
-      rows.forEach(member=>{
-        const idx=teamRosterIndexForName(member&&member.name,used);
+      rows.forEach(raw=>{
+        const member=pzHistoryMember(raw);
+        if(!member||!member.name)return;
+        const idx=teamRosterIndexForName(member.name,used);
         if(idx<0)return;
         used.add(idx);addMember(idx,member);
       });
