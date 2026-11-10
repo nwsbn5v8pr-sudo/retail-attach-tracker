@@ -3282,7 +3282,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
     const normalizeTeamName=value=>String(value||'').toLowerCase()
       .normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
       .replace(/[.'’'\\-]/g,'').replace(/\\s+/g,' ').trim();
-    const teamNameAliases={'chris w.':'christopher w.'};
+    const teamNameAliases={'chris w.':'christopher w.','josh w.':'joshua w.','valentina':'valentina j.'};
     const teamRosterIndexForName=(sourceName,used)=>{
       const source=normalizeTeamName(sourceName);
       const aliased=normalizeTeamName(teamNameAliases[String(sourceName||'').trim().toLowerCase()]||sourceName);
