@@ -3329,7 +3329,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
         }
       });
     }
-    host.innerHTML='<div style="grid-column:1/-1;color:var(--text-secondary);font-size:12px;margin:0 0 2px;">Competition totals · Nov 6, 2026 – Jan 31, 2027 · Grand Slam = +10 · Every 10 NPS streaks = +20 bonus points</div>';
+    host.innerHTML='<div style="grid-column:1/-1;color:var(--text-secondary);font-size:12px;margin:0 0 2px;">Competition totals · Nov 7, 2026 – Jan 31, 2027 · Grand Slam = +10 · Every 10 NPS streaks = +20 bonus points</div>';
     ['Chris W Team','Dee’s Team'].forEach(team=>{
       const members=TEAM_ROSTER.map((r,index)=>Object.assign({},r,totalsByRoster[index])).filter(m=>m.team===team);
       const totals={};defs.forEach(([k])=>totals[k]=members.reduce((sum,m)=>sum+Number(m[k]||0),0));
