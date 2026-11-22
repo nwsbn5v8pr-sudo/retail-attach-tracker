@@ -3193,7 +3193,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
   }
 
   /* 📑 TAB SWITCHING LOGIC */
-  const PRO_VS_PRO_START = '2026-11-06';
+  const PRO_VS_PRO_START = '2026-11-07';
   const PRO_VS_PRO_END = '2027-01-31';
 
   const PZ_NPS_STREAKS_TABLE='pz_pro_vs_pro_nps_streaks';
@@ -3282,7 +3282,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
     const normalizeTeamName=value=>String(value||'').toLowerCase()
       .normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
       .replace(/[.'’'\\-]/g,'').replace(/\\s+/g,' ').trim();
-    const teamNameAliases={'chris w.':'christopher w.','josh w.':'joshua w.','valentina':'valentina j.','franco aiello':'francesco a.','nicey steward':'nisey s.','nicey':'nisey s.','nisey':'nisey s.','dee m.':'deshanae m.'};
+    const teamNameAliases={'chris w.':'christopher w.','josh w.':'joshua w.','valentina':'valentina j.','franco aiello':'francesco a.','nicey steward':'nisey s.','nicey':'nisey s.','nisey':'nisey s.','dee m.':'deshanae m.','kristal':'kristal j.','will':'will w.'};
     const teamRosterIndexForName=(sourceName,used)=>{
       const source=normalizeTeamName(sourceName);
       const aliased=normalizeTeamName(teamNameAliases[String(sourceName||'').trim().toLowerCase()]||sourceName);
