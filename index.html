@@ -1124,7 +1124,7 @@ window.pzEnforcePassword = pzEnforcePassword;
       <span class="kpi-num" id="kpi-grandslam" style="color: #ff9500;">0</span>
     </div>
     <div class="kpi-card">
-      <span class="kpi-label">🤳 Demo</span>
+      <span class="kpi-label">🆙 T@A Sign🆙</span>
       <span class="kpi-num" id="kpi-demo">0</span>
     </div>
     <div class="kpi-card">
@@ -1200,7 +1200,7 @@ window.pzEnforcePassword = pzEnforcePassword;
               🏆 Status <span class="sort-icon" id="sort-icon-slam">↕️</span>
             </th>
             <th style="text-align:center;" id="th-demo" onclick="setColumnSort('demo')">
-              🤳 Demo <span class="sort-icon" id="sort-icon-demo">↕️</span>
+              🆙 T@A Sign🆙 <span class="sort-icon" id="sort-icon-demo">↕️</span>
             </th>
             <th style="text-align:center;" id="th-ac" onclick="setColumnSort('ac')">
               🍎 AppleCare+ <span class="sort-icon" id="sort-icon-ac">↕️</span>
@@ -1295,7 +1295,7 @@ window.pzEnforcePassword = pzEnforcePassword;
         <li>Only qualifying activity in the Pro Vs Pro competition period counts toward competition totals.</li>
         <li>Each qualifying category result is worth one base point.</li>
         <li>Grand Slam and NPS bonuses are added on top of base points.</li>
-        <li>Demo activity and check-ins are tracked in the daily tracker but do not add Pro Vs Pro points.</li>
+        <li>T@A Sign🆙 activity and check-ins are tracked in the daily tracker but do not add Pro Vs Pro points.</li>
         <li>Verify the transaction before adding it to the tracker. Ask a leader if a transaction or category is unclear.</li>
       </ul>
     </article>
@@ -3195,6 +3195,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
   /* 📑 TAB SWITCHING LOGIC */
   const PRO_VS_PRO_START = '2026-11-07';
   const PRO_VS_PRO_END = '2027-01-31';
+  const TAA_SIGNUP_POINTS_START = '2026-11-23';
 
   const PZ_NPS_STREAKS_TABLE='pz_pro_vs_pro_nps_streaks';
   let proVsProNpsStreaks={};
@@ -3266,13 +3267,13 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
       loadProVsProNpsStreaks().then(()=>{if(currentTab==='teams')renderTeamPerformance();});
       return;
     }
-    const defs=[['ac','🍎 AppleCare+'],['upgrade','🆙 Upgrades'],['services','🛍️ Services'],['biz','💼 Business'],['acc','🎧 Accessories']];
+    const defs=[['ac','🍎 AppleCare+'],['upgrade','🆙 Upgrades'],['services','🛍️ Services'],['biz','💼 Business'],['acc','🎧 Accessories'],['demo','🆙 T@A Sign🆙']];
     const metrics=defs.map(x=>x[0]);
     const totalsByRoster=TEAM_ROSTER.map(r=>Object.assign(Object.fromEntries(metrics.map(k=>[k,0])),{slams:0,bonus:0,nps:Number(proVsProNpsStreaks[String(r.team||'')+'::'+String(r.name||'').trim().toLowerCase()]||0)}));
     totalsByRoster.forEach(m=>{m.npsBonus=Math.floor(m.nps/10)*20;});
     const datesInRange=d=>String(d||'')>=PRO_VS_PRO_START&&String(d||'')<=PRO_VS_PRO_END;
-    const addMember=(idx,member)=>{
-      metrics.forEach(k=>totalsByRoster[idx][k]+=Number(member[k]||0));
+    const addMember=(idx,member,dayDate)=>{
+      metrics.forEach(k=>{if(k!=='demo'||String(dayDate||'')>=TAA_SIGNUP_POINTS_START)totalsByRoster[idx][k]+=Number(member[k]||0);});
       if(getHitCount(member)===5){totalsByRoster[idx].slams++;totalsByRoster[idx].bonus+=10;}
     };
     // Daily/history rows can contain either abbreviated roster names or
@@ -3295,7 +3296,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
         .filter(x=>!(used&&used.has(x.i))&&x.parts.length>=2&&x.parts[0]===first&&x.parts[1][0]===surnameInitial);
       return candidates.length===1?candidates[0].i:-1;
     };
-    const addSnapshot=(snapshot)=>{
+    const addSnapshot=(snapshot,dayDate)=>{
       // Cloud history rows are stored as {date, data:[...]}; older/local
       // snapshots may still arrive as {members:[...]} or a bare member array.
       // Accept all three so archived activity is never silently skipped.
@@ -3308,10 +3309,10 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
         if(!member||!member.name)return;
         const idx=teamRosterIndexForName(member.name,used);
         if(idx<0)return;
-        used.add(idx);addMember(idx,member);
+        used.add(idx);addMember(idx,member,dayDate);
       });
     };
-    (historyRecords||[]).filter(r=>datesInRange(r.date)).forEach(addSnapshot);
+    (historyRecords||[]).filter(r=>datesInRange(r.date)).forEach(r=>addSnapshot(r,r.date));
     let liveDate='';
     try{liveDate=localStorage.getItem(STORAGE_KEY_LIVE_DAY)||getTodayString();}catch(e){liveDate=getTodayString();}
     if(datesInRange(liveDate)){
@@ -3325,11 +3326,11 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
         });
         if(matchIndex>=0){
           usedLiveMembers.add(matchIndex);
-          addMember(i,data[matchIndex]);
+          addMember(i,data[matchIndex],liveDate);
         }
       });
     }
-    host.innerHTML='<div style="grid-column:1/-1;color:var(--text-secondary);font-size:12px;margin:0 0 2px;">Competition totals · Nov 7, 2026 – Jan 31, 2027 · Grand Slam = +10 · Every 10 NPS streaks = +20 bonus points</div>';
+    host.innerHTML='<div style="grid-column:1/-1;color:var(--text-secondary);font-size:12px;margin:0 0 2px;">Competition totals · Nov 7, 2026 – Jan 31, 2027 · T@A Sign🆙 = 1 point per signup from Nov 23 · Grand Slam = +10 · Every 10 NPS streaks = +20 bonus points</div>';
     ['Chris W Team','Dee’s Team'].forEach(team=>{
       const members=TEAM_ROSTER.map((r,index)=>Object.assign({},r,totalsByRoster[index])).filter(m=>m.team===team);
       const totals={};defs.forEach(([k])=>totals[k]=members.reduce((sum,m)=>sum+Number(m[k]||0),0));
@@ -4101,7 +4102,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
   function exportCSV() {
     let csv = `PZ Focus & Follow Export (${currentTab.toUpperCase()})\n`;
     if (currentTab === 'daily' || currentTab === 'priorday') {
-      csv += "Checked In,Name,Job Title,Grand Slam Status (🏆),Demo (🤳),AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧),Apple Steps of Services,Notes\n";
+      csv += "Checked In,Name,Job Title,Grand Slam Status (🏆),T@A Sign🆙,AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧),Apple Steps of Services,Notes\n";
       const list = getDisplayList();
       const exportData = [...list].sort((a, b) => (b.checkedIn ? 1 : 0) - (a.checkedIn ? 1 : 0));
       exportData.forEach(p => {
@@ -4112,7 +4113,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
       });
     } else {
       const list = getDisplayList();
-      csv += "Name,Job Title,Shifts Worked,Grand Slam Achieved,Demo (🤳),AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧)\n";
+      csv += "Name,Job Title,Shifts Worked,Grand Slam Achieved,T@A Sign🆙,AppleCare+ (🍎),Upgrades (🆙),Services (🛍️),Business (💼),Accessories (🎧)\n";
       list.forEach(p => {
         csv += `"${p.name}","${p.role}",${p.shiftsWorked},${p.slamsAchieved},${p.demo || 0},${p.ac},${p.upgrade},${p.services},${p.biz},${p.acc}\n`;
       });
