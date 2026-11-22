@@ -1276,7 +1276,7 @@ window.pzEnforcePassword = pzEnforcePassword;
     <article class="team-performance-card" style="margin-bottom:14px;">
       <h2>🏆 Bonus Points</h2>
       <ul style="padding-left:20px;line-height:1.8;margin-top:10px;">
-        <li><strong>Grand Slam: +10 points</strong> when all five qualifying categories are achieved in the same daily snapshot.</li>
+        <li><strong>Grand Slam: +10 points</strong> when all five qualifying categories are achieved in the same daily snapshot. T@A Sign🆙 is not required; earn an additional <strong>+10 points</strong> when at least one T@A signup is also recorded that day.</li>
         <li><strong>NPS: +20 points</strong> for every 10 NPS streaks recorded. Each completed group of 10 earns another 20 points.</li>
       </ul>
     </article>
@@ -3274,7 +3274,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
     const datesInRange=d=>String(d||'')>=PRO_VS_PRO_START&&String(d||'')<=PRO_VS_PRO_END;
     const addMember=(idx,member,dayDate)=>{
       metrics.forEach(k=>{if(k!=='demo'||String(dayDate||'')>=TAA_SIGNUP_POINTS_START)totalsByRoster[idx][k]+=Number(member[k]||0);});
-      if(getHitCount(member)===5){totalsByRoster[idx].slams++;totalsByRoster[idx].bonus+=10;}
+      if(getHitCount(member)===5){totalsByRoster[idx].slams++;totalsByRoster[idx].bonus+=10;if(Number(member.demo||0)>0&&String(dayDate||'')>=TAA_SIGNUP_POINTS_START)totalsByRoster[idx].bonus+=10;}
     };
     // Daily/history rows can contain either abbreviated roster names or
     // full names. Resolve exact names first, then a unique first-name +
@@ -3330,7 +3330,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
         }
       });
     }
-    host.innerHTML='<div style="grid-column:1/-1;color:var(--text-secondary);font-size:12px;margin:0 0 2px;">Competition totals · Nov 7, 2026 – Jan 31, 2027 · T@A Sign🆙 = 1 point per signup from Nov 23 · Grand Slam = +10 · Every 10 NPS streaks = +20 bonus points</div>';
+    host.innerHTML='<div style="grid-column:1/-1;color:var(--text-secondary);font-size:12px;margin:0 0 2px;">Competition totals · Nov 7, 2026 – Jan 31, 2027 · T@A Sign🆙 = 1 point per signup from Nov 23 · Grand Slam = +10 · Grand Slam + T@A signup = +10 extra · Every 10 NPS streaks = +20 bonus points</div>';
     ['Chris W Team','Dee’s Team'].forEach(team=>{
       const members=TEAM_ROSTER.map((r,index)=>Object.assign({},r,totalsByRoster[index])).filter(m=>m.team===team);
       const totals={};defs.forEach(([k])=>totals[k]=members.reduce((sum,m)=>sum+Number(m[k]||0),0));
