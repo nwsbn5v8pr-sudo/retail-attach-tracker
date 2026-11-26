@@ -2484,9 +2484,18 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
     return true;
   }
   function queueWeeklyFocusCloudSync() { if(weeklyFocusCloudTimer) clearTimeout(weeklyFocusCloudTimer); weeklyFocusCloudTimer=setTimeout(()=>syncWeeklyFocusCloud().catch(e=>console.warn("Weekly focus cloud sync failed",e)),500); }
+  function applyWeeklyFocusCloudRow(row) {
+    if(!row || !row.week_start) return;
+    let snap=row.snapshot; if(typeof snap==="string"){try{snap=JSON.parse(snap)}catch(_){snap=[]}}
+    const bucket={}; (Array.isArray(snap)?snap:[]).forEach(item=>{if(item&&item.member_id!=null) bucket[String(item.member_id)]={focus:String(item.focus||""),followed_up:!!item.followed_up,updated_at:item.updated_at||row.updated_at||""};});
+    weeklyFocusData[String(row.week_start)]=Object.assign({},weeklyFocusData[String(row.week_start)]||{},bucket);
+    try{localStorage.setItem(WEEKLY_FOCUS_KEY,JSON.stringify(weeklyFocusData));}catch(e){}
+    const active=document.activeElement;
+    if(!active || !active.classList || !active.classList.contains("weekly-focus-input")) { if(typeof renderTableStructure==="function"){renderTableStructure(); if(typeof updateTotals==="function") updateTotals();} }
+  }
   async function loadWeeklyFocusCloud() {
     if(!supabaseReady) return false; const key=window.PZ_WORKING_API_KEY||SUPABASE_PUBLISHABLE_KEY; const rows=await pzRestRequest("pz_focus_follow_weekly_history?select=week_start,snapshot,updated_at&order=week_start.desc",{},key);
-    (rows||[]).forEach(row=>{ let snap=row.snapshot; if(typeof snap==="string"){try{snap=JSON.parse(snap)}catch(_){snap=[]}} const bucket={}; (Array.isArray(snap)?snap:[]).forEach(item=>{ if(item&&item.member_id!=null) bucket[String(item.member_id)]={focus:String(item.focus||""),followed_up:!!item.followed_up,updated_at:item.updated_at||row.updated_at||""}; }); weeklyFocusData[String(row.week_start)]=Object.assign({},weeklyFocusData[String(row.week_start)]||{},bucket); });
+    (rows||[]).forEach(applyWeeklyFocusCloudRow);
     try{localStorage.setItem(WEEKLY_FOCUS_KEY,JSON.stringify(weeklyFocusData));}catch(e){}
     if(typeof renderTableStructure==="function"){renderTableStructure(); if(typeof updateTotals==="function") updateTotals();}
     return true;
@@ -5115,6 +5124,8 @@ async function initSupabaseSync(){
         .on("postgres_changes",
           {event:"DELETE",schema:"public",table:PZ_MEMBERS_TABLE},
           payload=>{if(payload.old)pzApply(Object.assign({},payload.old,{removed:true}));})
+        .on("postgres_changes",{event:"INSERT",schema:"public",table:"pz_focus_follow_weekly_history"},payload=>applyWeeklyFocusCloudRow(payload.new))
+        .on("postgres_changes",{event:"UPDATE",schema:"public",table:"pz_focus_follow_weekly_history"},payload=>applyWeeklyFocusCloudRow(payload.new))
         .subscribe(status=>{
           if(status==="SUBSCRIBED") setSyncBadge("🟢 PZ Cloud Sync Active");
           else if(status==="CHANNEL_ERROR"||status==="TIMED_OUT")
