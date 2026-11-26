@@ -2476,7 +2476,22 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
   try { weeklyFocusData = JSON.parse(localStorage.getItem(WEEKLY_FOCUS_KEY) || "{}") || {}; } catch (_) { weeklyFocusData = {}; }
   function weeklyFocusKeyForNow() { const d=new Date(); const day=(d.getDay()+6)%7; d.setDate(d.getDate()-day); d.setHours(0,0,0,0); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
   function weeklyFocusRecord(id) { const wk=weeklyFocusKeyForNow(); if(!weeklyFocusData[wk]) weeklyFocusData[wk]={}; return weeklyFocusData[wk][String(id)] || {focus:"",followed_up:false}; }
-  function saveWeeklyFocus(id,field,value) { const wk=weeklyFocusKeyForNow(); if(!weeklyFocusData[wk]) weeklyFocusData[wk]={}; const key=String(id); const rec=weeklyFocusData[wk][key] || {focus:"",followed_up:false}; rec[field]=field==="followed_up" ? !!value : String(value==null?"":value); rec.updated_at=new Date().toISOString(); weeklyFocusData[wk][key]=rec; try { localStorage.setItem(WEEKLY_FOCUS_KEY,JSON.stringify(weeklyFocusData)); } catch(e) { console.warn("Weekly focus save failed",e); } }
+  let weeklyFocusCloudTimer = null;
+  function weeklyFocusWeekEnd(weekStart) { const d=new Date(weekStart+"T12:00:00"); d.setDate(d.getDate()+6); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+  async function syncWeeklyFocusCloud() {
+    const wk=weeklyFocusKeyForNow(); const snapshot=Object.keys(weeklyFocusData[wk]||{}).map(id=>Object.assign({member_id:id},weeklyFocusData[wk][id]));
+    const key=window.PZ_WORKING_API_KEY||SUPABASE_PUBLISHABLE_KEY; const body={week_start:wk,week_end:weeklyFocusWeekEnd(wk),snapshot:snapshot,updated_at:new Date().toISOString()}; await pzRestRequest("pz_focus_follow_weekly_history?on_conflict=week_start",{method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=representation"},body:JSON.stringify(body)},key);
+    return true;
+  }
+  function queueWeeklyFocusCloudSync() { if(weeklyFocusCloudTimer) clearTimeout(weeklyFocusCloudTimer); weeklyFocusCloudTimer=setTimeout(()=>syncWeeklyFocusCloud().catch(e=>console.warn("Weekly focus cloud sync failed",e)),500); }
+  async function loadWeeklyFocusCloud() {
+    if(!supabaseReady) return false; const key=window.PZ_WORKING_API_KEY||SUPABASE_PUBLISHABLE_KEY; const rows=await pzRestRequest("pz_focus_follow_weekly_history?select=week_start,snapshot,updated_at&order=week_start.desc",{},key);
+    (rows||[]).forEach(row=>{ let snap=row.snapshot; if(typeof snap==="string"){try{snap=JSON.parse(snap)}catch(_){snap=[]}} const bucket={}; (Array.isArray(snap)?snap:[]).forEach(item=>{ if(item&&item.member_id!=null) bucket[String(item.member_id)]={focus:String(item.focus||""),followed_up:!!item.followed_up,updated_at:item.updated_at||row.updated_at||""}; }); weeklyFocusData[String(row.week_start)]=Object.assign({},weeklyFocusData[String(row.week_start)]||{},bucket); });
+    try{localStorage.setItem(WEEKLY_FOCUS_KEY,JSON.stringify(weeklyFocusData));}catch(e){}
+    if(typeof renderTableStructure==="function"){renderTableStructure(); if(typeof updateTotals==="function") updateTotals();}
+    return true;
+  }
+  function saveWeeklyFocus(id,field,value) { const wk=weeklyFocusKeyForNow(); if(!weeklyFocusData[wk]) weeklyFocusData[wk]={}; const key=String(id); const rec=weeklyFocusData[wk][key] || {focus:"",followed_up:false}; rec[field]=field==="followed_up" ? !!value : String(value==null?"":value); rec.updated_at=new Date().toISOString(); weeklyFocusData[wk][key]=rec; try { localStorage.setItem(WEEKLY_FOCUS_KEY,JSON.stringify(weeklyFocusData)); } catch(e) { console.warn("Weekly focus save failed",e); } queueWeeklyFocusCloudSync(); }
   function buildRowElement(p) {
     const isLive = (currentTab === 'daily');
     const isPrior = (currentTab === 'priorday');
@@ -5074,6 +5089,7 @@ async function initSupabaseSync(){
     // archived records.
     supabaseReady=true;
     await loadPzCloudHistory();
+    await loadWeeklyFocusCloud().catch(e=>console.warn("PZ weekly focus load failed",e));
 
     // Start the actual 15-second rollover engine. The previous version defined
     // setupAutoEngines() but never invoked it, so the automatic day rollover
