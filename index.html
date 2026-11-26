@@ -105,6 +105,8 @@ window.pzEnforcePassword = pzEnforcePassword;
       --tab-bg: #2c2c2e;
       --tab-active-bg: #3a3a3c;
     }
+  .weekly-focus-input{width:100%;min-width:145px;min-height:38px;resize:vertical;box-sizing:border-box;border:1px solid var(--border-color,#ccc);border-radius:7px;padding:7px;background:var(--card-bg,transparent);color:inherit;font:inherit;font-size:12px}
+  .weekly-followup-check{width:20px;height:20px;accent-color:var(--accent,#1683ff);cursor:pointer}
     .notes-input {
       color: #ffffff !important;
       -webkit-text-fill-color: #ffffff !important;
@@ -1220,7 +1222,7 @@ window.pzEnforcePassword = pzEnforcePassword;
             <th style="text-align:center;" id="th-step" onclick="setColumnSort('step')">
               Apple Steps of Services <span class="sort-icon" id="sort-icon-step">↕️</span>
             </th>
-            <th id="th-notes">Notes / Focus</th>
+            <th id="th-notes">Notes / Focus</th><th>Weekly Focus</th><th style="text-align:center;">Follow-Up ✓</th>
           </tr>
         </thead>
         <tbody id="tableBody"></tbody>
@@ -1235,7 +1237,7 @@ window.pzEnforcePassword = pzEnforcePassword;
             <td style="text-align:center;" id="tot-biz">0</td>
             <td style="text-align:center;" id="tot-acc">0</td>
             <td style="text-align:center;" id="tot-step">-</td>
-            <td id="tot-notes">-</td>
+            <td id="tot-notes">-</td><td id="tot-weekly-focus">-</td><td id="tot-weekly-followup" style="text-align:center;">-</td>
           </tr>
         </tfoot>
       </table>
@@ -2468,6 +2470,13 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
     });
   }
 
+  // Weekly focus persists independently from daily notes and daily metric resets.
+  const WEEKLY_FOCUS_KEY = "pz_weekly_focus_followup_v1";
+  let weeklyFocusData = {};
+  try { weeklyFocusData = JSON.parse(localStorage.getItem(WEEKLY_FOCUS_KEY) || "{}") || {}; } catch (_) { weeklyFocusData = {}; }
+  function weeklyFocusKeyForNow() { const d=new Date(); const day=(d.getDay()+6)%7; d.setDate(d.getDate()-day); d.setHours(0,0,0,0); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+  function weeklyFocusRecord(id) { const wk=weeklyFocusKeyForNow(); if(!weeklyFocusData[wk]) weeklyFocusData[wk]={}; return weeklyFocusData[wk][String(id)] || {focus:"",followed_up:false}; }
+  function saveWeeklyFocus(id,field,value) { const wk=weeklyFocusKeyForNow(); if(!weeklyFocusData[wk]) weeklyFocusData[wk]={}; const key=String(id); const rec=weeklyFocusData[wk][key] || {focus:"",followed_up:false}; rec[field]=field==="followed_up" ? !!value : String(value==null?"":value); rec.updated_at=new Date().toISOString(); weeklyFocusData[wk][key]=rec; try { localStorage.setItem(WEEKLY_FOCUS_KEY,JSON.stringify(weeklyFocusData)); } catch(e) { console.warn("Weekly focus save failed",e); } }
   function buildRowElement(p) {
     const isLive = (currentTab === 'daily');
     const isPrior = (currentTab === 'priorday');
@@ -2543,6 +2552,8 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
         <td>
           <textarea class="notes-input" id="notes-${p.id}" type="text" placeholder="Add note / focus..." value="${escapeHtml(p.notes || '')}" onclick="event.stopPropagation()" oninput="saveNote('${jsAttr(p.id)}', this.value)" rows="1"></textarea>
         </td>
+        <td><textarea class="weekly-focus-input" id="weekly-focus-${p.id}" rows="2" placeholder="Set this week's focus..." onclick="event.stopPropagation()" oninput="saveWeeklyFocus('${p.id}','focus',this.value)">${escapeHtml(weeklyFocusRecord(p.id).focus || "")}</textarea></td>
+        <td style="text-align:center;"><input class="weekly-followup-check" type="checkbox" aria-label="Follow-up completed" ${weeklyFocusRecord(p.id).followed_up ? "checked" : ""} onchange="saveWeeklyFocus('${p.id}','followed_up',this.checked)"></td>
       `;
     } else if (isPrior) {
       const hits = getHitCount(p);
@@ -2568,7 +2579,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
         <td style="text-align:center;"><span class="aggregate-val">${p.biz}</span></td>
         <td style="text-align:center;"><span class="aggregate-val">${p.acc}</span></td>
         <td style="text-align:center;"><span style="color:var(--text-secondary); font-size:12px;">${p.step || '-'}</span></td>
-        <td><span style="color:var(--text-secondary); font-size:12px;">${p.notes || '-'}</span></td>
+        <td><span style="color:var(--text-secondary); font-size:12px;">${p.notes || '-'}</span></td><td><span style="font-size:12px;">${escapeHtml(weeklyFocusRecord(p.id).focus || "-")}</span></td><td style="text-align:center;">${weeklyFocusRecord(p.id).followed_up ? "✓" : "—"}</td>
       `;
     } else {
       const slamBadge = p.slamsAchieved > 0 
@@ -2593,7 +2604,7 @@ const TEAM_ROSTER = [{"name":"Felipe F.","role":"Business Expert","team":"Chris 
         <td style="text-align:center;"><span class="aggregate-val">${p.biz}</span></td>
         <td style="text-align:center;"><span class="aggregate-val">${p.acc}</span></td>
         <td style="text-align:center;"><span style="color: var(--text-secondary); font-size: 12px;">${p.shiftsWorked > 0 ? (p.ac / p.shiftsWorked).toFixed(1) + ' AC/shift' : '-'}</span></td>
-        <td><span style="color: var(--text-secondary); font-size: 12px;">Services: ${p.shiftsWorked > 0 ? (p.services / p.shiftsWorked).toFixed(1) : '0'}/shift</span></td>
+        <td><span style="color: var(--text-secondary); font-size: 12px;">Services: ${p.shiftsWorked > 0 ? (p.services / p.shiftsWorked).toFixed(1) : '0'}/shift</span></td><td><span style="font-size:12px;">${escapeHtml(weeklyFocusRecord(p.id).focus || "-")}</span></td><td style="text-align:center;">${weeklyFocusRecord(p.id).followed_up ? "✓" : "—"}</td>
       `;
     }
 
